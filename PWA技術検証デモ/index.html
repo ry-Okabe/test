@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<!-- viewport-fit=cover: iOSのノッチ/セーフエリア対応 -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PWA技術検証</title>
+
+<!-- ===== iOS(Safari) 用：ホーム画面追加でスタンドアロン表示にする ===== -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="CS検証">
+<link rel="apple-touch-icon" href="./icon-192.png">
+
+<!-- ===== 汎用 / Android 用 ===== -->
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1F4E78">
+<link rel="manifest" href="./manifest.webmanifest">
+
+<style>
+  :root{ --navy:#1F4E78; --green:#2E7D32; --amber:#B06E00; --red:#B00020; --line:#d8dee8; }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ margin:0; height:100%; }
+  body{
+    font-family:system-ui,-apple-system,"Segoe UI","Hiragino Sans","Noto Sans JP",sans-serif;
+    color:#20242c; background:#eef2f7; line-height:1.6;
+    /* セーフエリア（iOSの全画面/スタンドアロンで重要） */
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  header{ background:var(--navy); color:#fff; padding:14px 18px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  header h1{ font-size:17px; margin:0; font-weight:700; }
+  .mode-badge{ margin-left:auto; background:#fff; color:var(--navy); font-weight:700; border-radius:999px; padding:4px 12px; font-size:13px; }
+  main{ max-width:860px; margin:0 auto; padding:16px; }
+  .lead{ color:#4a5568; font-size:13px; margin:4px 0 16px; }
+  .grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px; }
+  .card{ background:#fff; border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+  .card .k{ font-size:12px; color:#6b7280; margin:0 0 4px; }
+  .card .v{ font-size:16px; font-weight:700; margin:0; word-break:break-word; }
+  .ok{ color:var(--green); } .warn{ color:var(--amber); } .ng{ color:var(--red); }
+  .dot::before{ content:"●"; margin-right:6px; }
+  .actions{ display:flex; gap:10px; flex-wrap:wrap; margin:18px 0; }
+  button{ font:inherit; font-weight:700; border:0; border-radius:10px; padding:12px 18px; color:#fff; background:var(--navy); cursor:pointer; }
+  button.ghost{ background:#fff; color:var(--navy); border:1.5px solid var(--navy); }
+  button:disabled{ opacity:.4; cursor:not-allowed; }
+  details{ background:#fff; border:1px solid var(--line); border-radius:12px; margin:10px 0; overflow:hidden; }
+  summary{ padding:13px 16px; font-weight:700; cursor:pointer; color:var(--navy); }
+  details .body{ padding:0 16px 14px; font-size:14px; color:#374151; }
+  ol{ margin:6px 0 0; padding-left:1.3em; } li{ margin:4px 0; }
+  .note{ background:#FFF8E1; border:1px solid #F3D27A; border-radius:12px; padding:12px 14px; font-size:13px; color:#6b5900; margin-top:14px; }
+  .pill{ display:inline-block; background:#eef2f7; border:1px solid var(--line); border-radius:6px; padding:1px 7px; font-size:12px; margin:1px 2px; }
+  code{ background:#eef2f7; padding:1px 5px; border-radius:4px; font-size:12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>PWA技術検証</h1>
+  <span class="mode-badge" id="badge">判定中…</span>
+</header>
+
+<main>
+  <p class="lead">この画面を <b>iPad(Safari)</b> と <b>Android(Chrome)</b> で開き、①全画面/スタンドアロン表示 ②ホーム画面インストール を検証します。各カードが「今の端末の対応状況」です。</p>
+
+  <div class="grid" id="status"></div>
+
+  <div class="actions">
+    <button id="fsBtn">全画面にする</button>
+    <button id="fsExit" class="ghost">全画面を解除</button>
+    <button id="installBtn" class="ghost" hidden>ホーム画面にインストール</button>
+  </div>
+
+  <details id="iosHelp">
+    <summary>iPhone / iPad（Safari）での手順</summary>
+    <div class="body">
+      <ol>
+        <li>Safari下部（または上部）の<b>共有ボタン</b> <span class="pill">□↑</span> をタップ</li>
+        <li><b>「ホーム画面に追加」</b>を選ぶ → 追加</li>
+        <li>ホーム画面に出た<b>アイコンから起動</b> → アドレスバーが消え<b>スタンドアロン表示</b>になる</li>
+      </ol>
+      <p>※ iOSは「全画面にする」ボタン（Fullscreen API）に<b>非対応</b>。アドレスバー等を隠すのは<b>ホーム画面追加→スタンドアロン</b>が正攻法です。</p>
+    </div>
+  </details>
+
+  <details id="andHelp">
+    <summary>Android（Chrome）での手順</summary>
+    <div class="body">
+      <ol>
+        <li>上の<b>「ホーム画面にインストール」</b>ボタン、またはChromeメニュー <span class="pill">⋮</span> →「アプリをインストール」</li>
+        <li>インストール後、<b>アイコンから起動</b>すると全画面（manifestの<code>display:fullscreen</code>）で開く</li>
+        <li>「全画面にする」ボタン（Fullscreen API）も利用可能</li>
+      </ol>
+    </div>
+  </details>
+
+  <div class="note" id="verdict"></div>
+</main>
+
+<script>
+(function(){
+  "use strict";
+  const ua = navigator.userAgent;
+  const isIOS = /iphone|ipad|ipod/i.test(ua) || (navigator.platform==="MacIntel" && navigator.maxTouchPoints>1);
+  const isAndroid = /android/i.test(ua);
+  const platform = isIOS ? "iOS (iPhone/iPad)" : isAndroid ? "Android" : "PC / その他";
+
+  function displayMode(){
+    if (navigator.standalone === true) return "standalone";               // iOS ホーム画面起動
+    for (const m of ["fullscreen","standalone","minimal-ui"]){
+      try { if (matchMedia("(display-mode: "+m+")").matches) return m; } catch(e){}
+    }
+    return "browser";
+  }
+  const fsApi = !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+
+  function row(k,v,cls){ return '<div class="card"><p class="k">'+k+'</p><p class="v '+(cls||"")+'">'+v+'</p></div>'; }
+
+  function render(){
+    const dm = displayMode();
+    const installed = dm !== "browser";
+    document.getElementById("badge").textContent = "表示:" + dm;
+
+    let swTxt = ("serviceWorker" in navigator) ? "対応" : "非対応";
+    const reg = navigator.serviceWorker && navigator.serviceWorker.controller;
+    if (("serviceWorker" in navigator)) swTxt = reg ? "登録・制御中" : "対応（登録待ち/未制御）";
+
+    const cards = [
+      row("表示モード", dm, dm==="browser" ? "warn dot" : "ok dot"),
+      row("プラットフォーム", platform, "dot"),
+      row("インストール状態", installed ? "インストール済み（アプリ表示）" : "ブラウザ表示中", installed ? "ok dot" : "warn dot"),
+      row("全画面API (Fullscreen)", fsApi ? "対応" : "非対応（iOSは標準非対応）", fsApi ? "ok dot" : "ng dot"),
+      row("Service Worker", swTxt, ("serviceWorker" in navigator) ? "ok dot" : "ng dot"),
+      row("画面サイズ", innerWidth + " × " + innerHeight + " px (dpr " + (devicePixelRatio||1) + ")", "dot")
+    ];
+    document.getElementById("status").innerHTML = cards.join("");
+
+    // 端末に応じて手順と判定を出し分け
+    document.getElementById("iosHelp").open = isIOS;
+    document.getElementById("andHelp").open = isAndroid;
+    document.getElementById("fsBtn").disabled = !fsApi;
+
+    let v = "";
+    if (isIOS){
+      v = "<b>iOSの結論：</b>「全画面API」は非対応だが、<b>ホーム画面に追加→アイコン起動でスタンドアロン表示</b>（アドレスバー/ツールバー非表示）になり、実運用の全画面要件は満たせる。"
+        + (installed ? " ✅ 現在スタンドアロンで表示中＝検証OK。" : " ▶ 上の手順でホーム画面に追加し、アイコンから起動して再確認してください。");
+    } else if (isAndroid){
+      v = "<b>Androidの結論：</b>全画面API・<code>display:fullscreen</code>・インストールすべて対応。"
+        + (installed ? " ✅ 現在アプリ表示中＝検証OK。" : " ▶ 「インストール」ボタン、または全画面ボタンで確認してください。");
+    } else {
+      v = "<b>PC：</b>参考表示です。実機（iPad / Android）で開いて検証してください。全画面API=" + (fsApi?"対応":"非対応") + "。";
+    }
+    document.getElementById("verdict").innerHTML = v;
+  }
+
+  // 全画面（Android等）
+  document.getElementById("fsBtn").onclick = function(){
+    const el = document.documentElement;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (req) req.call(el).catch(function(e){ alert("全画面に失敗: " + e.message); });
+    else alert("この端末は全画面API非対応です（iOSはホーム画面追加→スタンドアロンで対応）。");
+  };
+  document.getElementById("fsExit").onclick = function(){
+    const ex = document.exitFullscreen || document.webkitExitFullscreen;
+    if (ex && (document.fullscreenElement || document.webkitFullscreenElement)) ex.call(document);
+  };
+
+  // Android インストール導線
+  let deferred = null;
+  window.addEventListener("beforeinstallprompt", function(e){
+    e.preventDefault(); deferred = e;
+    const b = document.getElementById("installBtn"); b.hidden = false;
+    b.onclick = function(){ deferred.prompt(); deferred.userChoice.finally(function(){ deferred=null; b.hidden=true; }); };
+  });
+  window.addEventListener("appinstalled", function(){ render(); });
+
+  // 表示モード変化・回転・リサイズで再判定（ライブ更新）
+  ["resize","orientationchange","visibilitychange"].forEach(function(ev){ window.addEventListener(ev, render); });
+  try { matchMedia("(display-mode: standalone)").addEventListener("change", render); } catch(e){}
+  try { matchMedia("(display-mode: fullscreen)").addEventListener("change", render); } catch(e){}
+
+  // Service Worker 登録（Androidのインストール要件を満たすため）
+  if ("serviceWorker" in navigator){
+    navigator.serviceWorker.register("./sw.js").then(render).catch(function(){ render(); });
+  }
+  render();
+})();
+</script>
+</body>
+</html>
