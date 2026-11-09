@@ -85,7 +85,7 @@ const cfg = () => ({
   pin:  String($('#cfgPin').value||'1234')
 });
 
-let locked=true, entry='';
+let locked=false, entry='';
 
 function log(msg,kind){
   const t=new Date().toLocaleTimeString('ja-JP',{hour12:false})+'.'+String(new Date().getMilliseconds()).padStart(3,'0');
