@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>PWA 再認証テスト</title>
+<style>
+  :root{--bg:#0f1720;--card:#1b2634;--accent:#2f6fed;--ok:#1f9d55;--warn:#d98a1b;--txt:#e8eef5;--sub:#9fb0c3}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font-family:-apple-system,"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif}
+  #app{padding:20px;max-width:720px;margin:0 auto}
+  h1{font-size:18px;margin:8px 0 4px}
+  .sub{color:var(--sub);font-size:13px;margin-bottom:14px}
+  .card{background:var(--card);border-radius:12px;padding:14px 16px;margin:10px 0}
+  .row{display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .big{font-size:32px;font-weight:700}
+  .muted{color:var(--sub);font-size:12px}
+  #log{height:240px;overflow:auto;background:#0b1118;border-radius:10px;padding:10px;font:12px/1.5 ui-monospace,Menlo,monospace;color:#cfe3ff;white-space:pre-wrap}
+  .cfg label{display:flex;justify-content:space-between;align-items:center;margin:6px 0;font-size:14px}
+  input[type=number]{width:90px;background:#0b1118;color:var(--txt);border:1px solid #2a3a4d;border-radius:8px;padding:6px 8px;text-align:right}
+  /* ロックオーバーレイ */
+  #lock{position:fixed;inset:0;background:rgba(8,12,18,.98);display:none;flex-direction:column;align-items:center;justify-content:center;z-index:9999;padding:24px}
+  #lock.show{display:flex}
+  #lock h2{margin:0 0 4px}
+  #pin{letter-spacing:14px;font-size:34px;min-height:44px;margin:14px 0}
+  .pad{display:grid;grid-template-columns:repeat(3,76px);gap:12px}
+  .key{height:76px;border-radius:50%;background:#20344b;color:#fff;font-size:26px;display:flex;align-items:center;justify-content:center;user-select:none;cursor:pointer}
+  .key:active{background:#2f6fed}
+  .lockreason{color:var(--warn);font-size:14px;min-height:20px;margin-bottom:8px}
+  .keepwrap{margin-top:16px;color:var(--sub);font-size:14px;display:flex;align-items:center;gap:8px}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px}
+  .pill.ok{background:rgba(31,157,85,.2);color:#6ee7a8}
+  .pill.lk{background:rgba(217,138,27,.2);color:#ffce83}
+  button.reset{background:#243247;color:#cfe3ff;border:0;border-radius:8px;padding:8px 12px;font-size:13px}
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>PWA 再認証テスト <span id="mode" class="pill ok"></span></h1>
+  <div class="sub">共有iPad想定：コールドスタート／背面復帰／アイドルで「端末共通PIN」を再要求できるか検証。<b>ホーム画面に追加</b>して standalone で開くと本番に近い挙動になります。</div>
+
+  <div class="card">
+    <div class="row"><div>状態</div><div id="state" class="big">—</div></div>
+    <div class="row"><div class="muted">無操作からの経過 / しきい値</div><div class="muted" id="idle">0s / —</div></div>
+  </div>
+
+  <div class="card cfg">
+    <div class="muted" style="margin-bottom:6px">設定（テスト用に短め）</div>
+    <label>アイドルでロック（秒）<input id="cfgIdle" type="number" value="30" min="5"></label>
+    <label>背面に居た時間がこれ超でロック（秒）<input id="cfgBg" type="number" value="5" min="0"></label>
+    <label>デモPIN<input id="cfgPin" type="number" value="1234"></label>
+  </div>
+
+  <div class="card">
+    <div class="row" style="margin-bottom:8px"><div class="muted">イベントログ（visibilitychange 等）</div><button class="reset" onclick="clearLog()">クリア</button></div>
+    <div id="log"></div>
+  </div>
+</div>
+
+<!-- ロック画面（アプリ独自のオーバーレイ＝OSのロックとは別物） -->
+<div id="lock">
+  <h2>🔒 ロック中</h2>
+  <div class="lockreason" id="reason"></div>
+  <div class="muted">端末共通PINを入力（デモ: <span id="pinhint"></span>）</div>
+  <div id="pin"></div>
+  <div class="pad" id="pad"></div>
+  <label class="keepwrap"><input type="checkbox" id="keep"> 今日1日ログインを保持する</label>
+</div>
+
+<script>
+/* ============================================================
+   PWA 再認証の検証ロジック
+   - 端末認証（クライアント証明書）は網層の別レイヤー想定。ここは「存在確認＝端末共通PIN」部分だけ。
+   - OSのロック解除パスワードとは無関係のアプリ独自PIN。
+   ============================================================ */
+const $ = s => document.querySelector(s);
+const now = () => Date.now();
+const K_HIDDEN='reauth_hiddenAt', K_KEEP='reauth_keepUntil', K_LASTACT='reauth_lastActivity';
+
+const cfg = () => ({
+  idle: Math.max(5, Number($('#cfgIdle').value)||30)*1000,
+  bg:   Math.max(0, Number($('#cfgBg').value)||5)*1000,
+  pin:  String($('#cfgPin').value||'1234')
+});
+
+let locked=true, entry='';
+
+function log(msg,kind){
+  const t=new Date().toLocaleTimeString('ja-JP',{hour12:false})+'.'+String(new Date().getMilliseconds()).padStart(3,'0');
+  const el=$('#log'); el.textContent += `[${t}] ${msg}\n`; el.scrollTop=el.scrollHeight;
+}
+function clearLog(){ $('#log').textContent=''; }
+
+/* ---- ロック/アンロック ---- */
+function lock(reason){
+  if(locked) return;
+  locked=true; entry='';
+  $('#reason').textContent = reason||'';
+  $('#pin').textContent=''; $('#lock').classList.add('show');
+  $('#state').textContent='🔒 ロック'; setMode();
+  log('LOCK ← '+reason, 'lock');
+}
+function unlock(){
+  locked=false; $('#lock').classList.remove('show');
+  $('#state').textContent='✅ 利用中';
+  localStorage.setItem(K_LASTACT, String(now()));
+  if($('#keep').checked){
+    const d=new Date(); d.setHours(23,59,59,999);
+    localStorage.setItem(K_KEEP, String(d.getTime()));
+    log('「今日1日保持」ON → '+new Date(Number(localStorage.getItem(K_KEEP))).toLocaleTimeString('ja-JP'));
+  }
+  setMode();
+  log('UNLOCK（PIN一致）');
+}
+function keepValid(){ const u=Number(localStorage.getItem(K_KEEP)||0); return u && now()<u; }
+function setMode(){
+  const m=$('#mode');
+  if(keepValid()){ m.textContent='今日1日保持 中'; m.className='pill lk'; }
+  else { m.textContent='毎回PIN'; m.className='pill ok'; }
+}
+
+/* ---- PINパッド ---- */
+function buildPad(){
+  const pad=$('#pad'); pad.innerHTML='';
+  ['1','2','3','4','5','6','7','8','9','C','0','⌫'].forEach(k=>{
+    const d=document.createElement('div'); d.className='key'; d.textContent=k;
+    d.onclick=()=>press(k); pad.appendChild(d);
+  });
+}
+function press(k){
+  if(k==='C'){ entry=''; }
+  else if(k==='⌫'){ entry=entry.slice(0,-1); }
+  else if(entry.length<6){ entry+=k; }
+  $('#pin').textContent='●'.repeat(entry.length);
+  if(entry.length>=cfg().pin.length){
+    if(entry===cfg().pin){ unlock(); }
+    else { $('#reason').textContent='PINが違います'; entry=''; $('#pin').textContent=''; log('PIN不一致'); }
+  }
+}
+
+/* ---- アクティビティ（アイドル判定は時刻差分で） ---- */
+function touch(){ if(!locked) localStorage.setItem(K_LASTACT, String(now())); }
+['touchstart','mousedown','keydown','click','scroll'].forEach(e=>document.addEventListener(e,touch,{passive:true}));
+
+function tick(){
+  const c=cfg();
+  const last=Number(localStorage.getItem(K_LASTACT)||now());
+  const idle=now()-last;
+  $('#idle').textContent = Math.floor(idle/1000)+'s / '+Math.floor(c.idle/1000)+'s';
+  if(!locked && idle>c.idle) lock('アイドルタイムアウト（無操作 '+Math.floor(idle/1000)+'s）');
+}
+setInterval(tick,500);
+
+/* ---- 背面/復帰の検知（本命） ---- */
+document.addEventListener('visibilitychange', ()=>{
+  const st=document.visibilityState;
+  log('visibilitychange → '+st);
+  if(st==='hidden'){
+    localStorage.setItem(K_HIDDEN, String(now()));
+  }else{ // visible（復帰）
+    const h=Number(localStorage.getItem(K_HIDDEN)||0);
+    const away = h? now()-h : 0;
+    log('復帰：背面にいた時間 '+Math.floor(away/1000)+'s');
+    if(!locked && away>cfg().bg && !keepValid()) lock('背面から復帰（'+Math.floor(away/1000)+'s 経過）');
+  }
+});
+window.addEventListener('pageshow', e=> log('pageshow'+(e.persisted?'（bfcache復帰）':'')));
+window.addEventListener('pagehide', ()=> log('pagehide'));
+
+/* ---- 起動（コールドスタート） ---- */
+buildPad();
+$('#pinhint').textContent=cfg().pin;
+log('起動（load）＝コールドスタート');
+if(keepValid()){ locked=false; $('#state').textContent='✅ 利用中（今日1日保持）'; log('今日1日保持が有効 → PIN省略'); }
+else { lock('起動時（コールドスタート）'); }
+setMode();
+</script>
+</body>
+</html>
