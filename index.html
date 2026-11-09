@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>コタ PWA検証ハブ</title>
+<style>
+  :root{--bg:#0f1720;--card:#1b2634;--accent:#2f6fed;--txt:#e8eef5;--sub:#9fb0c3}
+  *{box-sizing:border-box}
+  html,body{margin:0;min-height:100%;background:var(--bg);color:var(--txt);font-family:-apple-system,"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif}
+  .wrap{max-width:560px;margin:0 auto;padding:28px 18px}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{color:var(--sub);font-size:13px;margin-bottom:18px}
+  a.item{display:block;background:var(--card);border-radius:14px;padding:16px 18px;margin:12px 0;text-decoration:none;color:var(--txt);border:1px solid #27374a}
+  a.item b{font-size:16px}
+  a.item .d{color:var(--sub);font-size:13px;margin-top:4px}
+  a.item .go{float:right;color:var(--accent);font-weight:700}
+  .foot{color:var(--sub);font-size:12px;margin-top:18px;line-height:1.6}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>コタ カウンセリング｜PWA検証ハブ</h1>
+  <div class="sub">iPad(Safari) / Android(Chrome) で開き、各項目を検証します。<b>ホーム画面に追加</b>して standalone 起動が本番に近い挙動です。</div>
+
+  <a class="item" href="PWA技術検証デモ/"><span class="go">→</span><b>① PWA技術検証デモ</b><div class="d">全画面/スタンドアロン表示・ホーム画面インストールの対応確認</div></a>
+  <a class="item" href="PWA技術検証デモ/pwa-reauth-test.html"><span class="go">→</span><b>② 再認証テスト（PIN）</b><div class="d">起動・背面復帰・アイドルで端末共通PINを再要求</div></a>
+  <a class="item" href="PWA技術検証デモ/pdf-test.html"><span class="go">→</span><b>③ PDF挙動テスト（POP-16）</b><div class="d">季節提案PDFを iframe / PDF.js / 別タブ 等で比較</div></a>
+
+  <div class="foot">
+    ※ 各ページは同じスコープ（PWA技術検証デモ/）内なので、standaloneでもアプリ内で遷移します（左上の×は出ません）。<br>
+    ※ 更新が古く見えるときは、ホーム画面アイコンを削除→再追加（service workerキャッシュ更新）。
+  </div>
+</div>
+</body>
+</html>

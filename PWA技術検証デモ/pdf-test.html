@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="PDF検証">
+<title>POP-16 PDF挙動テスト（PWA）</title>
+<style>
+  :root{--bg:#0f1720;--card:#1b2634;--accent:#2f6fed;--ok:#1f9d55;--warn:#d98a1b;--txt:#e8eef5;--sub:#9fb0c3}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;min-height:100%;background:var(--bg);color:var(--txt);font-family:-apple-system,"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif}
+  #app{padding:18px;max-width:760px;margin:0 auto}
+  h1{font-size:18px;margin:6px 0 2px}
+  h2{font-size:14px;margin:16px 0 6px;color:#bcd0e6}
+  .sub{color:var(--sub);font-size:13px;margin-bottom:8px}
+  .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px}
+  .pill.ok{background:rgba(31,157,85,.2);color:#6ee7a8}
+  .pill.warn{background:rgba(217,138,27,.2);color:#ffce83}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  button{width:100%;padding:13px 12px;border:0;border-radius:11px;background:var(--accent);color:#fff;font-size:14px;font-weight:600}
+  button.sec{background:#243247;color:#cfe3ff}
+  .hint{color:var(--sub);font-size:12px;margin:4px 0 0}
+  #log{height:200px;overflow:auto;background:#0b1118;border-radius:10px;padding:10px;font:12px/1.55 ui-monospace,Menlo,monospace;color:#cfe3ff;white-space:pre-wrap;margin-top:10px}
+  .reset{background:#243247;color:#cfe3ff;border-radius:8px;padding:7px 11px;font-size:13px;width:auto}
+  /* モーダル（POP-16想定） */
+  #modal{position:fixed;inset:0;background:rgba(8,12,18,.96);display:none;flex-direction:column;z-index:999;padding:12px}
+  #modal.show{display:flex}
+  #modalbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  #modalbar b{font-size:14px}
+  #modalbar button{width:auto;padding:8px 14px}
+  #viewer{flex:1;background:#fff;border-radius:10px;overflow:auto;-webkit-overflow-scrolling:touch}
+  #viewer iframe,#viewer object{width:100%;height:100%;border:0}
+  #viewer canvas{display:block;margin:0 auto;max-width:100%}
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>POP-16 PDF挙動テスト <span id="mode" class="pill warn">判定中</span></h1>
+  <div class="sub">季節提案PDFをカウンセリング中に見せる想定。各ボタンを押して、<b>standalone(ホーム画面起動)</b>での挙動を比べてください。<br>※ <b>ログ</b>に「離脱→復帰(visibilitychange)」も記録されるので、Safari等に飛んだか分かります。</div>
+
+  <h2>A. モーダル内にインライン表示（離脱しない＝理想）</h2>
+  <div class="grid">
+    <button onclick="openIframe()">① iframeで表示</button>
+    <button onclick="openObject()">② object/embedで表示</button>
+    <button onclick="openPdfjs()">③ PDF.js(canvas)で表示</button>
+    <button class="sec" onclick="closeModal()">モーダルを閉じる</button>
+  </div>
+  <p class="hint">①②はiOSで真っ白/ダウンロードになりがち。③PDF.jsはアプリ内で確実に描画（本命）。</p>
+
+  <h2>B. 別で開く（離脱する可能性）</h2>
+  <div class="grid">
+    <button class="sec" onclick="openBlankLink()">④ 別タブリンク(target=_blank)</button>
+    <button class="sec" onclick="openWindow()">⑤ window.open</button>
+    <button class="sec" onclick="navigateSelf()">⑥ 直接遷移(location.href)</button>
+    <button class="sec" onclick="downloadPdf()">⑦ ダウンロード</button>
+  </div>
+  <p class="hint">iOSのstandaloneは④⑤⑥でSafari/アプリ内ブラウザに出る（＝カウンセリング中断）。⑦はファイル保存。</p>
+
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px">
+    <h2 style="margin:0">ログ</h2><button class="reset" onclick="clearLog()">クリア</button>
+  </div>
+  <div id="log"></div>
+</div>
+
+<!-- モーダル（POP-16） -->
+<div id="modal">
+  <div id="modalbar"><b id="modaltitle">季節提案PDF</b><button class="sec" onclick="closeModal()">× 閉じる</button></div>
+  <div id="viewer"></div>
+</div>
+
+<!-- PDF.js (CDN) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+const PDF = 'seasonal-sample.pdf';
+const $ = s => document.querySelector(s);
+function log(m){ const t=new Date().toLocaleTimeString('ja-JP',{hour12:false}); const el=$('#log'); el.textContent+=`[${t}] ${m}\n`; el.scrollTop=el.scrollHeight; }
+function clearLog(){ $('#log').textContent=''; }
+
+/* standalone 判定 */
+(function(){
+  const sa = window.navigator.standalone===true || matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: fullscreen)').matches;
+  const b=$('#mode'); b.textContent = sa? 'standalone（アプリ風）':'ブラウザ表示'; b.className='pill '+(sa?'ok':'warn');
+  log('起動：'+(sa?'standalone':'ブラウザ')+' / UA='+navigator.userAgent.replace(/^Mozilla\S+ /,'').slice(0,60));
+})();
+
+/* 離脱/復帰（Safari等に飛んだか分かる） */
+document.addEventListener('visibilitychange', ()=> log('visibilitychange → '+document.visibilityState+(document.visibilityState==='visible'?'（アプリに戻った）':'（離脱/背面）')));
+window.addEventListener('pageshow', e=> log('pageshow'+(e.persisted?'（bfcache復帰）':'')));
+window.addEventListener('blur', ()=> log('window blur'));
+
+/* モーダル */
+function showModal(title){ $('#modaltitle').textContent=title; $('#modal').classList.add('show'); }
+function closeModal(){ $('#modal').classList.remove('show'); $('#viewer').innerHTML=''; log('モーダルを閉じた'); }
+
+/* A. インライン */
+function openIframe(){ showModal('① iframe'); $('#viewer').innerHTML='<iframe src="'+PDF+'"></iframe>'; log('① iframe を設置（iOSは真っ白/DLになりがち→表示されるか確認）'); }
+function openObject(){ showModal('② object/embed'); $('#viewer').innerHTML='<object data="'+PDF+'" type="application/pdf"><embed src="'+PDF+'" type="application/pdf"></object>'; log('② object/embed を設置'); }
+async function openPdfjs(){
+  showModal('③ PDF.js(canvas)'); $('#viewer').innerHTML='<canvas id="c"></canvas>';
+  try{
+    if(!window.pdfjsLib){ log('③ PDF.js 読み込み失敗（CDN/オフライン？）'); return; }
+    pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const pdf=await pdfjsLib.getDocument(PDF).promise;
+    const page=await pdf.getPage(1);
+    const vp=page.getViewport({scale:1.3});
+    const c=$('#c'); c.width=vp.width; c.height=vp.height;
+    await page.render({canvasContext:c.getContext('2d'),viewport:vp}).promise;
+    log('③ PDF.js 描画成功＝アプリ内で表示できた（本命）');
+  }catch(e){ log('③ PDF.js エラー: '+e.message); }
+}
+
+/* B. 別で開く */
+function openBlankLink(){ log('④ target=_blank リンクをクリック…'); const a=document.createElement('a'); a.href=PDF; a.target='_blank'; a.rel='noopener'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>log('④ 画面がSafari/アプリ内ブラウザに切替わったら「離脱」。×や完了ボタンが出ていないか確認'),300); }
+function openWindow(){ log('⑤ window.open 実行…'); const w=window.open(PDF,'_blank','noopener'); log('⑤ 戻り値='+(w?'Windowオブジェクト（ポップアップ許可）':'null（ブロック/同画面遷移の可能性）')); }
+function navigateSelf(){ log('⑥ location.href で直接遷移（standaloneだと戻れない恐れ）'); location.href=PDF; }
+function downloadPdf(){ log('⑦ download 実行'); const a=document.createElement('a'); a.href=PDF; a.download='seasonal-sample.pdf'; document.body.appendChild(a); a.click(); a.remove(); }
+</script>
+</body>
+</html>
