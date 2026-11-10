@@ -8,18 +8,15 @@ GitHub Pages は mTLS（クライアント証明書認証）を強制できな�
 - `cert_test/` に `ca.crt` と `ca.key`（CA秘密鍵）があること（＝発行元。この端末のローカルにあります）
 - iPad と PC が **同一 Wi‑Fi**
 
-## 手順
-1. **このPCのLAN IPを調べる**（例 `192.168.1.23`）
-   - Windows: `ipconfig` の IPv4 アドレス
-2. **サーバ証明書を生成**（`mtls_server/` 内で）
-   ```sh
-   sh gen_server_cert.sh 192.168.1.23
-   ```
-3. **サーバ起動**
-   ```sh
-   node server.js
-   ```
-   → `https://0.0.0.0:8443/` で待受
+## 手順（ワンコマンド）
+`mtls_server/` フォルダで：
+```sh
+sh start.sh
+```
+→ **LAN IP を自動検出 → サーバ証明書を生成 → サーバ起動** まで一気に実行し、
+iPad で開く URL（例 `https://192.168.1.23:8443/`）を表示します。停止は `Ctrl+C`。
+
+> 手動でやる場合： `sh gen_server_cert.sh <LAN IP>` → `node server.js`
 4. **iPad 側の準備**（Safari）
    - 検証サイトの `cert_test/` ページから
      - **ca.crt** をインストール＋**信頼を有効化**（設定→一般→情報→証明書信頼設定でルートCAをON）※サーバのTLSを信頼させるため

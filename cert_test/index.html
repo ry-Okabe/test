@@ -72,7 +72,7 @@
   <div class="card">
     <p class="hint">証明書が<b>入っている端末だけ</b>開けるページ（mTLS）。GitHub PagesはmTLS不可なので、<b>PCで保護サーバを起動</b>し、同一Wi‑FiのiPadから開きます。証明書が無い端末は <b>⛔403</b>。</p>
     <ol>
-      <li>PCの <code>cert_test/mtls_server/</code> で　<code>sh gen_server_cert.sh &lt;PCのLAN IP&gt;</code>　→　<code>node server.js</code></li>
+      <li>PCの <code>cert_test/mtls_server/</code> で　<b><code>sh start.sh</code></b>（LAN IP自動検出→証明書生成→起動。表示されたURLを使う）</li>
       <li>iPadに <b>ca.crt を信頼</b>（③）＋<b>クライアント証明書</b>（①か②）を導入</li>
       <li>下にサーバURL（例 <code>https://192.168.1.23:8443/</code>）を入れて「開く」</li>
     </ol>
