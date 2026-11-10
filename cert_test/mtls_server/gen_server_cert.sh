@@ -1,5 +1,5 @@
 #!/bin/sh
-# サーバ証明書（COTA Device Root CA 署名）を生成する。
+# サーバ証明書（Test Device Root CA 署名）を生成する。
 # 使い方:  sh gen_server_cert.sh <このPCのLAN IP または ホスト名>
 #   例:    sh gen_server_cert.sh 192.168.1.23
 # iPad から https://<LAN IP>:8443/ で開くため、SAN に LAN IP を入れる。
@@ -35,7 +35,7 @@ $ALT
 EOF
 
 openssl genrsa -out server.key 2048
-openssl req -new -key server.key -subj "/C=JP/O=COTA/OU=mTLS/CN=$HOST" -out server.csr
+openssl req -new -key server.key -subj "/C=JP/O=Test/OU=mTLS/CN=$HOST" -out server.csr
 openssl x509 -req -in server.csr -CA "$CA_CRT" -CAkey "$CA_KEY" -CAcreateserial \
   -days 825 -sha256 -extfile server_ext.cnf -out server.crt
 echo ""
