@@ -1,2 +1,6 @@
+*.crt binary
+*.mobileconfig binary
+*.p12 binary
+*.pdf binary
 *.pdf binary
 *.png binary
