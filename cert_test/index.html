@@ -35,12 +35,12 @@
   <div class="sub">端末認証用のクライアント証明書を、<b>P12形式</b>と<b>モバイルコンフィグ形式（.mobileconfig）</b>で配布し、iPadでの<b>インストールUXの差</b>を比較する検証ページです。（内部定例 2026/11/10 の技術検証タスク①）</div>
 
   <div class="note">
-    検証用CA＝<code>COTA Device Root CA</code>／クライアント証明書＝<code>CN=salon-00123-ipad-01</code>（clientAuth）。<b>P12パスワード＝ <code>cota1234</code></b>。※これは検証専用の自己署名CAです。本番は別CA・別鍵で発行します。
+    検証用CA＝<code>Test Device Root CA</code>／クライアント証明書＝<code>CN=test-device-01</code>（clientAuth）。<b>P12パスワード＝ <code>test1234</code></b>。※これは検証専用の自己署名CAです。本番は別CA・別鍵で発行します。
   </div>
 
   <h2>① モバイルコンフィグ形式（.mobileconfig）＝タップで完結（本命）</h2>
   <div class="card">
-    <a class="btn" href="cota-clientcert.mobileconfig">.mobileconfig をダウンロード</a>
+    <a class="btn" href="test-clientcert.mobileconfig">.mobileconfig をダウンロード</a>
     <p class="hint">P12を内包した構成プロファイル。<b>Safariでタップ→「プロファイルがダウンロードされました」→設定アプリでインストール</b>だけで、証明書（鍵+証明書）がキーチェーンに入ります。パスワードはプロファイルに埋め込み済み＝<b>手入力ほぼ不要</b>。</p>
     <ol>
       <li>Safari でこのボタンをタップ</li>
@@ -53,11 +53,11 @@
   <h2>② P12形式（.p12）＝手動手順が多い（比較用）</h2>
   <div class="card">
     <a class="btn sec" href="client.p12">client.p12 をダウンロード</a>
-    <p class="hint">PKCS#12（鍵+証明書）。iOSでは<b>ダウンロード→設定アプリでプロファイルとしてインストール→P12パスワード <code>cota1234</code> を手入力</b>が必要。ファイルアプリ経由だと手数が増えます。</p>
+    <p class="hint">PKCS#12（鍵+証明書）。iOSでは<b>ダウンロード→設定アプリでプロファイルとしてインストール→P12パスワード <code>test1234</code> を手入力</b>が必要。ファイルアプリ経由だと手数が増えます。</p>
     <ol>
       <li>Safari でこのボタンをタップ → ダウンロード</li>
       <li><b>設定アプリ</b> → 「プロファイルがダウンロード済み」→ インストール</li>
-      <li>証明書の<b>パスワード <code>cota1234</code> を手入力</b> → 完了</li>
+      <li>証明書の<b>パスワード <code>test1234</code> を手入力</b> → 完了</li>
       <li>（ファイルアプリに落ちた場合）ファイルApp → 当該.p12をタップ → 設定に誘導 → 同上</li>
     </ol>
   </div>
@@ -96,9 +96,9 @@
     <table>
       <tr><th>観点</th><th>.mobileconfig</th><th>P12</th></tr>
       <tr><td>インストール操作</td><td class="ok">タップ→設定で数タップ</td><td class="warn">ダウンロード→設定→パスワード手入力</td></tr>
-      <tr><td>パスワード入力</td><td class="ok">不要（埋め込み）</td><td class="warn">必要（cota1234）</td></tr>
+      <tr><td>パスワード入力</td><td class="ok">不要（埋め込み）</td><td class="warn">必要（test1234）</td></tr>
       <tr><td>ファイルApp経由の手間</td><td class="ok">ほぼ無し</td><td class="warn">発生しやすい</td></tr>
-      <tr><td>インストール後の確認</td><td colspan="2">設定 → 一般 → VPNとデバイス管理 → プロファイルに「COTA 端末証明書プロファイル」/証明書が表示されるか</td></tr>
+      <tr><td>インストール後の確認</td><td colspan="2">設定 → 一般 → VPNとデバイス管理 → プロファイルに「Test 端末証明書プロファイル」/証明書が表示されるか</td></tr>
     </table>
     <p class="hint" style="margin-top:10px">※ インストール後、キーチェーンに入ったクライアント証明書が <b>PWA/アプリ内ブラウザから mTLS で提示されるか</b>は別途サーバ検証が必要（Safari単体は提示可、PWA/WKWebViewは要確認）。この点が「証明書で端末束縛」する際の最重要チェックです。</p>
   </div>

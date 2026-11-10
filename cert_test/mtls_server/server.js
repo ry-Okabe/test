@@ -1,5 +1,5 @@
-// COTA 端末認証 検証用 mTLS サーバ
-// クライアント証明書（COTA Device Root CA 署名）が無いとアクセスできない保護ページ。
+// 端末認証 検証用 mTLS サーバ
+// クライアント証明書（Test Device Root CA 署名）が無いとアクセスできない保護ページ。
 // 使い方:  node server.js        （デフォルト 0.0.0.0:8443）
 //   先に gen_server_cert.sh <LAN-IP> で server.crt / server.key を作成しておくこと。
 const https = require('https');
@@ -38,7 +38,7 @@ const server = https.createServer(opts, (req, res) => {
 <h1>⛔ アクセス拒否（要クライアント証明書）</h1>
 <p>この端末には有効なクライアント証明書がありません。</p>
 <p>理由：<code>${esc(req.client.authorizationError||'no client certificate')}</code></p>
-<p><b>COTA端末証明書（COTA Device Root CA 署名）をインストールした端末のみ</b>アクセスできます。</p>
+<p><b>Test端末証明書（Test Device Root CA 署名）をインストールした端末のみ</b>アクセスできます。</p>
 </body></html>`);
     return;
   }

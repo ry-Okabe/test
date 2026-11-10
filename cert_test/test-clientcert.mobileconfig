@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>PayloadContent</key>
+  <array>
+    <dict>
+      <key>PayloadType</key><string>com.apple.security.pkcs12</string>
+      <key>PayloadVersion</key><integer>1</integer>
+      <key>PayloadIdentifier</key><string>test.clientcert</string>
+      <key>PayloadUUID</key><string>A1B2C3D4-0001-4A00-9000-0000CAFE0001</string>
+      <key>PayloadDisplayName</key><string>Test クライアント証明書 (device-01)</string>
+      <key>PayloadCertificateFileName</key><string>client.p12</string>
+      <key>Password</key><string>test1234</string>
+      <key>PayloadContent</key>
+      <data>
+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
+Nlul4+i+98qa4X5/MlAECL/PQ+UwNLLwAgIIAA==
+      </data>
+    </dict>
+  </array>
+  <key>PayloadType</key><string>Configuration</string>
+  <key>PayloadVersion</key><integer>1</integer>
+  <key>PayloadIdentifier</key><string>test.deviceprofile</string>
+  <key>PayloadUUID</key><string>A1B2C3D4-0002-4A00-9000-0000CAFE0002</string>
+  <key>PayloadDisplayName</key><string>Test 端末証明書プロファイル</string>
+  <key>PayloadDescription</key><string>端末認証用クライアント証明書（検証用）。タップでインストールできます。</string>
+  <key>PayloadOrganization</key><string>Test</string>
+  <key>PayloadRemovalDisallowed</key><false/>
+</dict>
+</plist>
