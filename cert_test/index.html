@@ -62,11 +62,34 @@
     </ol>
   </div>
 
-  <h2>③ CA証明書（任意・サーバmTLS検証用）</h2>
+  <h2>③ CA証明書（信頼設定 / サーバmTLS検証用）</h2>
   <div class="card">
     <a class="btn ghost" href="ca.crt">ca.crt（ルートCA）をダウンロード</a>
-    <p class="hint">サーバ側でmTLSのクライアント検証に使うCA。端末側の信頼設定の確認にも。</p>
+    <p class="hint">④の保護ページ（自前サーバ）のTLSを信頼させるため、iPadで<b>ca.crtをインストール＋信頼を有効化</b>（設定→一般→情報→証明書信頼設定でON）。</p>
   </div>
+
+  <h2>④ 保護ページ（要クライアント証明書）へアクセス</h2>
+  <div class="card">
+    <p class="hint">証明書が<b>入っている端末だけ</b>開けるページ（mTLS）。GitHub PagesはmTLS不可なので、<b>PCで保護サーバを起動</b>し、同一Wi‑FiのiPadから開きます。証明書が無い端末は <b>⛔403</b>。</p>
+    <ol>
+      <li>PCの <code>cert_test/mtls_server/</code> で　<code>sh gen_server_cert.sh &lt;PCのLAN IP&gt;</code>　→　<code>node server.js</code></li>
+      <li>iPadに <b>ca.crt を信頼</b>（③）＋<b>クライアント証明書</b>（①か②）を導入</li>
+      <li>下にサーバURL（例 <code>https://192.168.1.23:8443/</code>）を入れて「開く」</li>
+    </ol>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <input id="mtlsUrl" placeholder="https://192.168.1.x:8443/" style="flex:1;padding:12px;border-radius:10px;border:1px solid var(--line);background:#0b1118;color:var(--txt);font-size:14px">
+      <a id="mtlsOpen" class="btn" style="margin:0;width:auto;padding:12px 20px" href="#">開く</a>
+    </div>
+    <p class="hint"><span class="ok">✅ 許可</span>＝証明書提示成功（端末CN表示）／<span class="warn">⛔ 403</span>＝証明書なし。<b>PWA/アプリ内ブラウザから開いて提示されるか</b>が最重要チェック。</p>
+    <p class="hint">サーバ一式・手順：<a href="mtls_server/README.md" style="color:#9fd0ff">mtls_server/README.md</a></p>
+  </div>
+  <script>
+    (function(){
+      var i=document.getElementById('mtlsUrl'),a=document.getElementById('mtlsOpen');
+      var s=localStorage.getItem('mtlsUrl'); if(s)i.value=s;
+      a.addEventListener('click',function(e){e.preventDefault();var u=i.value.trim();if(!u)return;if(!/^https?:\/\//.test(u))u='https://'+u;localStorage.setItem('mtlsUrl',u);location.href=u;});
+    })();
+  </script>
 
   <h2>確認ポイント（実機で見る）</h2>
   <div class="card">
