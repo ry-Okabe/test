@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>PWA 音声入力テスト</title>
+<style>
+  :root{--bg:#0f1720;--card:#1b2634;--accent:#2f6fed;--ok:#1f9d55;--warn:#d98a1b;--ng:#e5484d;--txt:#e8eef5;--sub:#9fb0c3}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font-family:-apple-system,"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif}
+  #app{padding:20px;max-width:720px;margin:0 auto}
+  a.back{color:var(--sub);font-size:13px;text-decoration:none}
+  h1{font-size:18px;margin:8px 0 4px}
+  .sub{color:var(--sub);font-size:13px;margin-bottom:14px}
+  .card{background:var(--card);border-radius:12px;padding:14px 16px;margin:10px 0}
+  .row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:6px 0}
+  .k{color:var(--sub);font-size:13px}.v{font-weight:700;font-size:15px}
+  .v.ok{color:#6ee7a8}.v.ng{color:#ff9a9d}.v.warn{color:#ffce83}
+  .controls{display:flex;flex-wrap:wrap;gap:10px;margin:6px 0}
+  button{font:inherit;font-weight:700;border:0;border-radius:10px;padding:12px 16px;color:#fff;background:var(--accent);cursor:pointer}
+  button.ghost{background:#243247;color:#cfe3ff}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  select{background:#0b1118;color:var(--txt);border:1px solid #2a3a4d;border-radius:8px;padding:10px}
+  #out{min-height:90px;background:#0b1118;border-radius:10px;padding:12px;font-size:15px;line-height:1.7;white-space:pre-wrap}
+  #out .interim{color:var(--sub)}
+  #log{height:180px;overflow:auto;background:#0b1118;border-radius:10px;padding:10px;font:12px/1.5 ui-monospace,Menlo,monospace;color:#cfe3ff;white-space:pre-wrap}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;background:rgba(47,111,237,.2);color:#9dc0ff}
+  .note{background:#17202b;border:1px solid #27374a;border-radius:10px;padding:10px 12px;font-size:12px;color:var(--sub);margin-top:12px;line-height:1.8}
+</style>
+</head>
+<body>
+<div id="app">
+  <a class="back" href="../index.html">← 検証ハブに戻る</a>
+  <h1>PWA 音声入力テスト <span id="mode" class="pill"></span></h1>
+  <div class="sub">プロフェッショナル診断のコメント欄・メモ帳の「音声入力」を想定。<b>iPad(Safari)/Android(Chrome)</b>、特に<b>ホーム画面に追加した standalone</b> で「マイクが開くか／日本語が文字起こしできるか」を確認します。</div>
+
+  <div class="card">
+    <div class="row"><span class="k">表示モード</span><span class="v" id="dm">—</span></div>
+    <div class="row"><span class="k">音声認識 (Web Speech API)</span><span class="v" id="sr">—</span></div>
+    <div class="row"><span class="k">マイク (getUserMedia)</span><span class="v" id="mic">未確認</span></div>
+  </div>
+
+  <div class="card">
+    <div class="controls">
+      <select id="lang" aria-label="言語">
+        <option value="ja-JP" selected>日本語 (ja-JP)</option>
+        <option value="en-US">English (en-US)</option>
+      </select>
+      <button id="startBtn">🎤 音声認識スタート</button>
+      <button id="micBtn" class="ghost">マイク許可を確認（録音可否）</button>
+    </div>
+    <div class="k" style="margin:8px 0 4px">認識結果</div>
+    <div id="out"></div>
+  </div>
+
+  <div class="card">
+    <div class="row"><span class="k">イベントログ（onstart / result / onerror / onend）</span><button class="ghost" style="padding:6px 10px" onclick="clearLog()">クリア</button></div>
+    <div id="log"></div>
+  </div>
+
+  <div class="note">
+    ※ Web Speech API は端末により<b>音声データが外部（Google 等）へ送信</b>されます（セキュリティ方針 L2 の論点）。<br>
+    ※ iOS 標準／スタンドアロン PWA ではマイク・音声認識が<b>動かない場合</b>があります。動かないときは、本番は「<b>OS キーボードの音声入力（ディクテーション）</b>」か「<b>録音＋サーバー文字起こし</b>」を前提にします。
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  const $=s=>document.querySelector(s);
+  function log(m){ const t=new Date().toLocaleTimeString('ja-JP',{hour12:false}); const el=$('#log'); el.textContent+='['+t+'] '+m+'\n'; el.scrollTop=el.scrollHeight; }
+  window.clearLog=function(){ $('#log').textContent=''; };
+
+  // 表示モード（standalone=ホーム画面起動＝本番に近い）
+  function dispMode(){
+    if(navigator.standalone===true) return 'standalone (iOS)';
+    try{ for(const m of ['fullscreen','standalone','minimal-ui']) if(matchMedia('(display-mode: '+m+')').matches) return m; }catch(e){}
+    return 'browser';
+  }
+  const dm=dispMode();
+  $('#dm').textContent=dm; $('#dm').className='v '+(dm==='browser'?'warn':'ok'); $('#mode').textContent=dm;
+
+  // 音声認識サポート
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(SR){ $('#sr').textContent='対応'; $('#sr').className='v ok'; }
+  else { $('#sr').textContent='非対応（この環境では利用不可）'; $('#sr').className='v ng'; $('#startBtn').disabled=true; }
+
+  // マイク許可確認（録音＝方式③の可否を独立に確認）
+  $('#micBtn').onclick=async function(){
+    $('#mic').textContent='確認中…'; $('#mic').className='v warn';
+    try{
+      if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia) throw new Error('getUserMedia 非対応');
+      const st=await navigator.mediaDevices.getUserMedia({audio:true});
+      st.getTracks().forEach(t=>t.stop());
+      $('#mic').textContent='許可OK（録音可）'; $('#mic').className='v ok'; log('getUserMedia: OK（マイク許可）');
+    }catch(e){
+      $('#mic').textContent='不可（'+(e.name||e.message)+'）'; $('#mic').className='v ng'; log('getUserMedia: 失敗 '+(e.name||'')+' '+(e.message||''));
+    }
+  };
+
+  // 音声認識（Web Speech API）
+  let rec=null, listening=false, finalText='';
+  function setBtn(){ $('#startBtn').textContent = listening ? '■ 停止' : '🎤 音声認識スタート'; }
+  function render(interim){
+    $('#out').innerHTML = (finalText||'') + (interim?'<span class="interim">'+interim+'</span>':'') || '<span class="interim">（ここに認識結果が表示されます）</span>';
+  }
+  render('');
+
+  $('#startBtn').onclick=function(){
+    if(!SR) return;
+    if(listening){ try{rec.stop();}catch(e){} return; }
+    rec=new SR();
+    rec.lang=$('#lang').value;
+    rec.interimResults=true;
+    rec.continuous=true;
+    rec.onstart=function(){ listening=true; setBtn(); log('onstart（聞き取り開始）lang='+rec.lang); };
+    rec.onresult=function(ev){
+      let interim='';
+      for(let i=ev.resultIndex;i<ev.results.length;i++){
+        const r=ev.results[i];
+        if(r.isFinal){ finalText+=r[0].transcript; log('final: "'+String(r[0].transcript).trim()+'" (conf '+((r[0].confidence||0)).toFixed(2)+')'); }
+        else interim+=r[0].transcript;
+      }
+      render(interim);
+    };
+    rec.onerror=function(ev){ log('onerror: '+ev.error+(ev.message?(' / '+ev.message):'')); };
+    rec.onend=function(){ listening=false; setBtn(); log('onend（停止）'); };
+    try{ rec.start(); }catch(e){ log('start 例外: '+e.message); }
+  };
+
+  log('起動：mode='+dm+' / SpeechRecognition='+(SR?'あり':'なし'));
+})();
+</script>
+</body>
+</html>
