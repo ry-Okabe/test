@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>OS音声入力（ディクテーション）テスト</title>
+<style>
+  :root{--bg:#0f1720;--card:#1b2634;--accent:#2f6fed;--ok:#1f9d55;--warn:#d98a1b;--txt:#e8eef5;--sub:#9fb0c3}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font-family:-apple-system,"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif}
+  #app{padding:20px;max-width:720px;margin:0 auto}
+  a.back{color:var(--sub);font-size:13px;text-decoration:none}
+  h1{font-size:18px;margin:8px 0 4px}
+  .sub{color:var(--sub);font-size:13px;margin-bottom:14px}
+  .card{background:var(--card);border-radius:12px;padding:14px 16px;margin:10px 0}
+  .row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:6px 0}
+  .k{color:var(--sub);font-size:13px}.v{font-weight:700;font-size:15px}
+  .v.ok{color:#6ee7a8}.v.warn{color:#ffce83}
+  textarea{width:100%;min-height:150px;background:#0b1118;color:var(--txt);border:1px solid #2a3a4d;border-radius:10px;padding:12px;font-size:16px;line-height:1.7;resize:vertical;box-sizing:border-box}
+  textarea:focus{outline:none;border-color:#3f5e86}
+  button{font:inherit;font-weight:700;border:0;border-radius:10px;padding:10px 16px;color:#fff;background:#243247;cursor:pointer}
+  ol{margin:6px 0 0;padding-left:1.2em} li{margin:5px 0;font-size:14px;color:#cdd8e4}
+  .note{background:#17202b;border:1px solid #27374a;border-radius:10px;padding:10px 12px;font-size:12px;color:var(--sub);margin-top:12px;line-height:1.8}
+  .big{font-size:22px}
+</style>
+</head>
+<body>
+<div id="app">
+  <a class="back" href="../index.html">← 検証ハブに戻る</a>
+  <h1>OS音声入力（ディクテーション）テスト <span class="k" id="mode"></span></h1>
+  <div class="sub">キーボードのマイク🎤で入力する方式です（Web Speech API は使いません）。<b>ホーム画面に追加した standalone</b> でも、<b>何度でも</b>音声入力できることを確認します。</div>
+
+  <div class="card">
+    <div class="row"><span class="k">表示モード</span><span class="v" id="dm">—</span></div>
+    <div class="row"><span class="k">入力文字数</span><span class="v big" id="cnt">0</span></div>
+    <div class="row"><span class="k">最後の入力</span><span class="v" id="last">—</span></div>
+  </div>
+
+  <div class="card">
+    <div class="k" style="margin-bottom:6px">ここに音声入力（コメント欄・メモ帳の想定）</div>
+    <textarea id="ta" placeholder="ここをタップ → キーボードのマイク🎤を押して話す。止めて、また話す、を何度でも繰り返せます。"></textarea>
+    <div style="margin-top:10px"><button onclick="clr()">クリア</button></div>
+  </div>
+
+  <div class="card">
+    <div class="k" style="margin-bottom:4px">使い方</div>
+    <ol>
+      <li><b>iPhone / iPad</b>：上のテキスト欄をタップ → キーボード下部の<b>マイク🎤</b>をタップ → 話す（もう一度マイクで停止）</li>
+      <li><b>Android</b>：テキスト欄をタップ → キーボード（Gboard等）の<b>マイク🎤</b> → 話す</li>
+      <li>何度でも繰り返して追記できます。上の「入力文字数／最後の入力」が更新されれば動作OK</li>
+    </ol>
+  </div>
+
+  <div class="note">
+    ※ これは本番のコメント欄・メモ帳で採用予定の方式です。アプリ（本システム）側からは音声を外部送信しません（OSのディクテーション処理自体はOSに準じます）。<br>
+    ※ 画面上に独自の「🎤音声入力ボタン」は不要（キーボードに最初からマイクがあるため）。
+  </div>
+</div>
+
+<script>
+(function(){
+  var ta=document.getElementById('ta');
+  function dispMode(){
+    if(navigator.standalone===true) return 'standalone (iOS)';
+    try{ for(var i=0,a=['fullscreen','standalone','minimal-ui'];i<a.length;i++) if(matchMedia('(display-mode: '+a[i]+')').matches) return a[i]; }catch(e){}
+    return 'browser';
+  }
+  var dm=dispMode();
+  document.getElementById('dm').textContent=dm;
+  document.getElementById('dm').className='v '+(dm==='browser'?'warn':'ok');
+  document.getElementById('mode').textContent=dm;
+  ta.addEventListener('input',function(){
+    document.getElementById('cnt').textContent=ta.value.length;
+    var d=new Date();
+    document.getElementById('last').textContent=d.toLocaleTimeString('ja-JP',{hour12:false});
+  });
+  window.clr=function(){ ta.value=''; document.getElementById('cnt').textContent='0'; ta.focus(); };
+})();
+</script>
+</body>
+</html>
