@@ -23,6 +23,7 @@
   button.ghost{background:#243247;color:#cfe3ff}
   button:disabled{opacity:.4;cursor:not-allowed}
   select{background:#0b1118;color:var(--txt);border:1px solid #2a3a4d;border-radius:8px;padding:10px}
+  label.opt{display:flex;align-items:center;gap:8px;color:var(--sub);font-size:13px;margin-top:8px}
   #out{min-height:90px;background:#0b1118;border-radius:10px;padding:12px;font-size:15px;line-height:1.7;white-space:pre-wrap}
   #out .interim{color:var(--sub)}
   #log{height:210px;overflow:auto;background:#0b1118;border-radius:10px;padding:10px;font:12px/1.5 ui-monospace,Menlo,monospace;color:#cfe3ff;white-space:pre-wrap}
@@ -34,12 +35,13 @@
 <div id="app">
   <a class="back" href="../index.html">← 検証ハブに戻る</a>
   <h1>PWA 音声入力テスト <span id="mode" class="pill"></span></h1>
-  <div class="sub">プロフェッショナル診断のコメント欄・メモ帳の「音声入力」を想定。<b>1タップ＝1セッション</b>（毎回作り直し）で、2回目以降も結果が返るかを検証します。</div>
+  <div class="sub">iOSの「2回目以降 結果が来ない」問題に、回避策（<b>AudioContext保持</b>／<b>abort→作り直し</b>／<b>getUserMedia</b>）を適用して検証します。トグルで効果を切り分けできます。</div>
 
   <div class="card">
     <div class="row"><span class="k">表示モード</span><span class="v" id="dm">—</span></div>
     <div class="row"><span class="k">音声認識 (Web Speech API)</span><span class="v" id="sr">—</span></div>
     <div class="row"><span class="k">状態</span><span class="v" id="st">停止</span></div>
+    <div class="row"><span class="k">AudioContext</span><span class="v" id="ac">—</span></div>
   </div>
 
   <div class="card">
@@ -51,17 +53,11 @@
       <button id="startBtn">🎤 音声認識スタート</button>
       <button id="clearBtn" class="ghost">結果をクリア</button>
     </div>
-    <label style="display:flex;align-items:center;gap:8px;color:var(--sub);font-size:13px;margin-top:10px">
-      <input type="checkbox" id="useGum" checked> 開始前に getUserMedia でマイク許可を取る（OFFで挙動を比較）
-    </label>
-    <div class="k" style="margin:8px 0 4px">認識結果</div>
+    <label class="opt"><input type="checkbox" id="useCtx" checked> ① AudioContext を保持してから開始（iOS audio session 対策・最有力）</label>
+    <label class="opt"><input type="checkbox" id="useAbort" checked> ② 開始前に abort → インスタンス作り直し</label>
+    <label class="opt"><input type="checkbox" id="useGum" checked> ③ 開始前に getUserMedia でマイク warm-up</label>
+    <div class="k" style="margin:10px 0 4px">認識結果</div>
     <div id="out"></div>
-  </div>
-
-  <div class="card">
-    <div class="k" style="margin-bottom:6px;color:#6ee7a8">参考：OSキーボードの音声入力（本番で使える方法・何度でも動く）</div>
-    <textarea id="osdict" placeholder="ここをタップ → キーボードのマイク🎤で話す。standaloneでも何回でも入力できます。" style="width:100%;min-height:90px;background:#0b1118;color:var(--txt);border:1px solid #2a3a4d;border-radius:10px;padding:12px;font-size:15px;line-height:1.7;resize:vertical;box-sizing:border-box"></textarea>
-    <div class="k" style="margin-top:6px">※ Web Speech API と違い OS 機能なので、standalone でも制限なく使えます。本番の音声入力はこちらを前提にできます。</div>
   </div>
 
   <div class="card">
@@ -70,8 +66,8 @@
   </div>
 
   <div class="note">
-    ※ iOS は「設定 → プライバシーとセキュリティ → 音声認識」を ON ＋ マイク許可が必要です。<br>
-    ※ 検証観点：<b>2回目以降のセッションで onresult（結果）が来るか</b>。来ない場合は「iOS では音声認識が実質1回しか結果を返さない」既知現象で、本番は OSキーボードの音声入力／録音＋サーバー文字起こしに倒します。
+    ※ iOS は「設定 → プライバシーとセキュリティ → 音声認識」ON ＋ マイク許可が必要。<br>
+    ※ 検証観点：<b>セッション2以降で `final` が出るか</b>。①ONで出れば原因＝audio session（回避成功）。全部ONでも2回目が `⚠ onresult来ず` なら、この端末/OSでは回避不可。
   </div>
 </div>
 
@@ -82,6 +78,7 @@
   function log(m){ const d=new Date(); const t=d.toLocaleTimeString('ja-JP',{hour12:false})+'.'+String(d.getMilliseconds()).padStart(3,'0'); const el=$('#log'); el.textContent+='['+t+'] '+m+'\n'; el.scrollTop=el.scrollHeight; }
   window.clearLog=function(){ $('#log').textContent=''; };
   function status(t,cls){ $('#st').textContent=t; $('#st').className='v '+(cls||''); }
+  function acState(){ $('#ac').textContent = audioCtx ? audioCtx.state : '未作成'; $('#ac').className='v '+(audioCtx&&audioCtx.state==='running'?'ok':'warn'); }
 
   function dispMode(){
     if(navigator.standalone===true) return 'standalone (iOS)';
@@ -95,58 +92,76 @@
   if(SR){ $('#sr').textContent='対応'; $('#sr').className='v ok'; }
   else { $('#sr').textContent='非対応（この環境では利用不可）'; $('#sr').className='v ng'; $('#startBtn').disabled=true; }
 
-  let rec=null, want=false, finalText='', micGranted=false, sess=0, gotResult=false;
+  let rec=null, want=false, finalText='', micGranted=false, sess=0, gotResult=false, audioCtx=null;
   function setBtn(){ $('#startBtn').textContent = want ? '■ 停止' : '🎤 音声認識スタート'; }
-  function render(interim){
-    $('#out').innerHTML = (finalText||'') + (interim?'<span class="interim">'+interim+'</span>':'') || '<span class="interim">（ここに認識結果が表示されます）</span>';
-  }
-  render('');
+  function render(interim){ $('#out').innerHTML = (finalText||'') + (interim?'<span class="interim">'+interim+'</span>':'') || '<span class="interim">（ここに認識結果が表示されます）</span>'; }
+  render(''); acState();
 
-  // ユーザー操作内で先にマイク許可を取得（iOS standalone 対策）。成功したら即解放。
+  // ① AudioContext をユーザー操作内で resume ＋ 無音ループ音源で audio session を握り続ける
+  //    （Zenn/WebKit知見：HTMLAudioや認識チャイムがセッションを奪う → Web Audioで握ると回避）
+  let keepAlive=false;
+  function ensureAudioCtx(){
+    try{
+      if(!audioCtx){ const AC=window.AudioContext||window.webkitAudioContext; if(!AC){ log('AudioContext 非対応'); return; } audioCtx=new AC(); log('AudioContext 作成'); }
+      if(audioCtx.state!=='running'){ audioCtx.resume().then(function(){ log('AudioContext resume → '+audioCtx.state); acState(); }).catch(function(e){ log('AudioContext resume失敗: '+e.message); }); }
+      else log('AudioContext state='+audioCtx.state);
+      if(!keepAlive){
+        try{
+          const buf=audioCtx.createBuffer(1, Math.max(1,Math.floor(audioCtx.sampleRate*0.5)), audioCtx.sampleRate); // 0.5秒の無音
+          const src=audioCtx.createBufferSource(); src.buffer=buf; src.loop=true;
+          const g=audioCtx.createGain(); g.gain.value=0.0;
+          src.connect(g).connect(audioCtx.destination); src.start(0);
+          keepAlive=true; log('AudioContext：無音ループ音源を開始（session保持）');
+        }catch(e){ log('キープ音源 失敗: '+e.message); }
+      }
+    }catch(e){ log('AudioContext 例外: '+e.message); }
+    acState();
+  }
+
+  // ③ マイク warm-up
   async function primeMic(){
     if(micGranted) return true;
-    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){ log('getUserMedia 非対応 → 許可取得をスキップ'); return true; }
+    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){ log('getUserMedia 非対応 → スキップ'); return true; }
     try{ const s=await navigator.mediaDevices.getUserMedia({audio:true}); s.getTracks().forEach(t=>t.stop()); micGranted=true; log('マイク許可 OK（getUserMedia）'); return true; }
     catch(e){ log('マイク許可 失敗: '+(e.name||'')+' '+(e.message||'')); status('マイク不可（'+(e.name||'error')+'）','ng'); return false; }
   }
 
-  // 自動再開はしない（1タップ=1セッション）。各セッションで毎回インスタンスを作り直す。
   function makeRec(n){
     const r=new SR();
     r.lang=$('#lang').value; r.interimResults=true; r.continuous=true;
     r.onstart      =function(){ log('[s'+n+'] onstart'); status('聞き取り中…（セッション'+n+'）','ok'); };
-    r.onaudiostart =function(){ log('[s'+n+'] onaudiostart（マイク入力開始）'); };
+    r.onaudiostart =function(){ log('[s'+n+'] onaudiostart'); };
     r.onspeechstart=function(){ log('[s'+n+'] onspeechstart（発話検知）'); };
-    r.onspeechend  =function(){ log('[s'+n+'] onspeechend（発話終了）'); };
+    r.onspeechend  =function(){ log('[s'+n+'] onspeechend'); };
     r.onnomatch    =function(){ log('[s'+n+'] onnomatch（認識できず）'); };
     r.onresult=function(ev){
       gotResult=true;
       let interim='';
       for(let i=ev.resultIndex;i<ev.results.length;i++){
         const res=ev.results[i];
-        if(res.isFinal){ finalText+=res[0].transcript; log('[s'+n+'] final: "'+String(res[0].transcript).trim()+'" (conf '+((res[0].confidence||0)).toFixed(2)+')'); }
+        if(res.isFinal){ finalText+=res[0].transcript; log('[s'+n+'] final: "'+String(res[0].transcript).trim()+'"'); }
         else interim+=res[0].transcript;
       }
       render(interim);
     };
     r.onerror=function(ev){
-      log('[s'+n+'] onerror: '+ev.error+(ev.message?(' / '+ev.message):''));
+      log('[s'+n+'] onerror: '+ev.error);
       if((ev.error==='not-allowed'||ev.error==='service-not-allowed') && !gotResult){ want=false; setBtn(); status('音声認識 不可（'+ev.error+'）','ng'); }
     };
     r.onend=function(){
-      log('[s'+n+'] onend'+(gotResult?'':' ⚠ このセッションは onresult が来なかった'));
-      if(!gotResult && n>=2) log('→ 《2回目以降 結果が返らない》を再現（iOS WebKit の既知現象の可能性大）');
+      log('[s'+n+'] onend'+(gotResult?'':' ⚠ onresult が来なかった'));
+      if(!gotResult && n>=2) log('→ 回避策を適用しても《2回目以降 結果なし》を再現');
       want=false; setBtn(); status(gotResult?'停止（もう一度スタートできます）':'停止（結果なし）','warn');
     };
     return r;
   }
 
   async function start(){
-    const useGum = $('#useGum') ? $('#useGum').checked : true;
-    if(useGum){ if(!await primeMic()){ want=false; setBtn(); return; } }
-    else { log('getUserMedia プライム OFF → SpeechRecognition に任せる'); }
+    if($('#useCtx').checked) ensureAudioCtx();                 // ① gesture内でresume
+    if($('#useGum').checked){ if(!await primeMic()){ want=false; setBtn(); return; } }  // ③
+    if($('#useAbort').checked && rec){ try{ rec.abort(); }catch(e){} rec=null; log('前セッションを abort'); }   // ②
     sess++; gotResult=false;
-    log('=== セッション'+sess+' 開始 ===');
+    log('=== セッション'+sess+' 開始（Ctx:'+(audioCtx?audioCtx.state:'off')+'）===');
     rec=makeRec(sess);
     try{ rec.start(); }
     catch(e){ log('start例外: '+e.message); want=false; setBtn(); status('開始失敗','ng'); }
@@ -154,7 +169,7 @@
 
   $('#startBtn').onclick=function(){
     if(!SR) return;
-    if(want){ want=false; setBtn(); status('停止中…','warn'); try{ rec && rec.abort(); }catch(e){ log('abort例外: '+e.message); } return; }
+    if(want){ want=false; setBtn(); status('停止中…','warn'); try{ rec && rec.stop(); }catch(e){ log('stop例外: '+e.message); } return; }
     want=true; finalText=''; render(''); setBtn(); status('準備中…','warn');
     start();
   };
