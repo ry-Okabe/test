@@ -23,25 +23,34 @@
   button.ghost{background:#243247;color:#cfe3ff}
   button:disabled{opacity:.4;cursor:not-allowed}
   select{background:#0b1118;color:var(--txt);border:1px solid #2a3a4d;border-radius:8px;padding:10px}
-  label.opt{display:flex;align-items:center;gap:8px;color:var(--sub);font-size:13px;margin-top:8px}
   #out{min-height:90px;background:#0b1118;border-radius:10px;padding:12px;font-size:15px;line-height:1.7;white-space:pre-wrap}
   #out .interim{color:var(--sub)}
-  #log{height:210px;overflow:auto;background:#0b1118;border-radius:10px;padding:10px;font:12px/1.5 ui-monospace,Menlo,monospace;color:#cfe3ff;white-space:pre-wrap}
+  #log{height:200px;overflow:auto;background:#0b1118;border-radius:10px;padding:10px;font:12px/1.5 ui-monospace,Menlo,monospace;color:#cfe3ff;white-space:pre-wrap}
   .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;background:rgba(47,111,237,.2);color:#9dc0ff}
   .note{background:#17202b;border:1px solid #27374a;border-radius:10px;padding:10px 12px;font-size:12px;color:var(--sub);margin-top:12px;line-height:1.8}
+  #guide{display:none;background:#2a1113;border:1px solid var(--ng);border-radius:12px;padding:14px 16px;margin:10px 0}
+  #guide .gt{font-weight:700;color:#ff9a9d;font-size:15px}
+  #guide ol{margin:8px 0 0;padding-left:1.25em} #guide li{margin:4px 0;font-size:14px;color:#ffd9da}
+  #guide .gn{font-size:12px;color:#d7a7a9;margin-top:8px}
 </style>
 </head>
 <body>
 <div id="app">
   <a class="back" href="../index.html">← 検証ハブに戻る</a>
   <h1>PWA 音声入力テスト <span id="mode" class="pill"></span></h1>
-  <div class="sub">iOSの「2回目以降 結果が来ない」問題に、回避策（<b>AudioContext保持</b>／<b>abort→作り直し</b>／<b>getUserMedia</b>）を適用して検証します。トグルで効果を切り分けできます。</div>
+  <div class="sub">iOSの「2回目以降 結果が来ない」対策（AudioContext保持／abort→作り直し／warm-up）を適用済み。マイク・音声認識がオフの場合は案内を表示します。</div>
 
   <div class="card">
     <div class="row"><span class="k">表示モード</span><span class="v" id="dm">—</span></div>
     <div class="row"><span class="k">音声認識 (Web Speech API)</span><span class="v" id="sr">—</span></div>
     <div class="row"><span class="k">状態</span><span class="v" id="st">停止</span></div>
     <div class="row"><span class="k">AudioContext</span><span class="v" id="ac">—</span></div>
+  </div>
+
+  <div id="guide">
+    <div class="gt" id="guideTitle"></div>
+    <ol id="guideSteps"></ol>
+    <div class="gn">※ iOSではWebページから設定アプリを自動で開けないため、お手数ですが手動でお願いします。</div>
   </div>
 
   <div class="card">
@@ -53,21 +62,18 @@
       <button id="startBtn">🎤 音声認識スタート</button>
       <button id="clearBtn" class="ghost">結果をクリア</button>
     </div>
-    <label class="opt"><input type="checkbox" id="useCtx" checked> ① AudioContext を保持してから開始（iOS audio session 対策・最有力）</label>
-    <label class="opt"><input type="checkbox" id="useAbort" checked> ② 開始前に abort → インスタンス作り直し</label>
-    <label class="opt"><input type="checkbox" id="useGum" checked> ③ 開始前に getUserMedia でマイク warm-up</label>
     <div class="k" style="margin:10px 0 4px">認識結果</div>
     <div id="out"></div>
   </div>
 
   <div class="card">
-    <div class="row"><span class="k">イベントログ（セッション番号付き）</span><button class="ghost" style="padding:6px 10px" onclick="clearLog()">クリア</button></div>
+    <div class="row"><span class="k">イベントログ</span><button class="ghost" style="padding:6px 10px" onclick="clearLog()">クリア</button></div>
     <div id="log"></div>
   </div>
 
   <div class="note">
     ※ iOS は「設定 → プライバシーとセキュリティ → 音声認識」ON ＋ マイク許可が必要。<br>
-    ※ 検証観点：<b>セッション2以降で `final` が出るか</b>。①ONで出れば原因＝audio session（回避成功）。全部ONでも2回目が `⚠ onresult来ず` なら、この端末/OSでは回避不可。
+    ※ 本番は、起動時に AudioContext を1つ保持し続け、効果音・TTSは必ず Web Audio API で鳴らす（`new Audio()` 禁止）。
   </div>
 </div>
 
@@ -79,6 +85,20 @@
   window.clearLog=function(){ $('#log').textContent=''; };
   function status(t,cls){ $('#st').textContent=t; $('#st').className='v '+(cls||''); }
   function acState(){ $('#ac').textContent = audioCtx ? audioCtx.state : '未作成'; $('#ac').className='v '+(audioCtx&&audioCtx.state==='running'?'ok':'warn'); }
+
+  // --- 設定案内バナー ---
+  function showGuide(kind){
+    const g=$('#guide');
+    if(kind==='speech'){
+      $('#guideTitle').textContent='⚠ 音声認識がオフの可能性があります';
+      $('#guideSteps').innerHTML='<li>設定アプリを開く</li><li>「プライバシーとセキュリティ」</li><li>「音声認識」を <b>オン</b> にする</li><li>この画面に戻って再度スタート</li>';
+    } else { // mic
+      $('#guideTitle').textContent='⚠ マイクが許可されていません';
+      $('#guideSteps').innerHTML='<li>設定アプリを開く</li><li>このアプリ（または Safari）→「マイク」を <b>許可</b></li><li>（設定 → プライバシーとセキュリティ → マイク からも確認可）</li><li>この画面に戻って再度スタート</li>';
+    }
+    g.style.display='block';
+  }
+  function hideGuide(){ $('#guide').style.display='none'; }
 
   function dispMode(){
     if(navigator.standalone===true) return 'standalone (iOS)';
@@ -92,50 +112,52 @@
   if(SR){ $('#sr').textContent='対応'; $('#sr').className='v ok'; }
   else { $('#sr').textContent='非対応（この環境では利用不可）'; $('#sr').className='v ng'; $('#startBtn').disabled=true; }
 
-  let rec=null, want=false, finalText='', micGranted=false, sess=0, gotResult=false, audioCtx=null;
+  let rec=null, want=false, finalText='', micGranted=false, sess=0, gotResult=false, audioCtx=null, keepAlive=false;
   function setBtn(){ $('#startBtn').textContent = want ? '■ 停止' : '🎤 音声認識スタート'; }
   function render(interim){ $('#out').innerHTML = (finalText||'') + (interim?'<span class="interim">'+interim+'</span>':'') || '<span class="interim">（ここに認識結果が表示されます）</span>'; }
   render(''); acState();
 
-  // ① AudioContext をユーザー操作内で resume ＋ 無音ループ音源で audio session を握り続ける
-  //    （Zenn/WebKit知見：HTMLAudioや認識チャイムがセッションを奪う → Web Audioで握ると回避）
-  let keepAlive=false;
+  // ① AudioContext を resume ＋ 無音ループ音源で iOS の audio session を握り続ける（常時適用）
   function ensureAudioCtx(){
     try{
       if(!audioCtx){ const AC=window.AudioContext||window.webkitAudioContext; if(!AC){ log('AudioContext 非対応'); return; } audioCtx=new AC(); log('AudioContext 作成'); }
       if(audioCtx.state!=='running'){ audioCtx.resume().then(function(){ log('AudioContext resume → '+audioCtx.state); acState(); }).catch(function(e){ log('AudioContext resume失敗: '+e.message); }); }
-      else log('AudioContext state='+audioCtx.state);
       if(!keepAlive){
         try{
-          const buf=audioCtx.createBuffer(1, Math.max(1,Math.floor(audioCtx.sampleRate*0.5)), audioCtx.sampleRate); // 0.5秒の無音
+          const buf=audioCtx.createBuffer(1, Math.max(1,Math.floor(audioCtx.sampleRate*0.5)), audioCtx.sampleRate);
           const src=audioCtx.createBufferSource(); src.buffer=buf; src.loop=true;
           const g=audioCtx.createGain(); g.gain.value=0.0;
           src.connect(g).connect(audioCtx.destination); src.start(0);
-          keepAlive=true; log('AudioContext：無音ループ音源を開始（session保持）');
+          keepAlive=true; log('AudioContext：無音ループ音源で session 保持');
         }catch(e){ log('キープ音源 失敗: '+e.message); }
       }
     }catch(e){ log('AudioContext 例外: '+e.message); }
     acState();
   }
 
-  // ③ マイク warm-up
+  // ③ マイク warm-up（常時適用）
   async function primeMic(){
     if(micGranted) return true;
     if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){ log('getUserMedia 非対応 → スキップ'); return true; }
-    try{ const s=await navigator.mediaDevices.getUserMedia({audio:true}); s.getTracks().forEach(t=>t.stop()); micGranted=true; log('マイク許可 OK（getUserMedia）'); return true; }
-    catch(e){ log('マイク許可 失敗: '+(e.name||'')+' '+(e.message||'')); status('マイク不可（'+(e.name||'error')+'）','ng'); return false; }
+    try{ const s=await navigator.mediaDevices.getUserMedia({audio:true}); s.getTracks().forEach(t=>t.stop()); micGranted=true; log('マイク許可 OK'); return true; }
+    catch(e){
+      log('マイク許可 失敗: '+(e.name||'')+' '+(e.message||''));
+      status('マイク不可（'+(e.name||'error')+'）','ng');
+      if(e.name==='NotAllowedError'||e.name==='SecurityError') showGuide('mic');
+      return false;
+    }
   }
 
   function makeRec(n){
     const r=new SR();
     r.lang=$('#lang').value; r.interimResults=true; r.continuous=true;
-    r.onstart      =function(){ log('[s'+n+'] onstart'); status('聞き取り中…（セッション'+n+'）','ok'); };
+    r.onstart      =function(){ log('[s'+n+'] onstart'); status('聞き取り中…','ok'); };
     r.onaudiostart =function(){ log('[s'+n+'] onaudiostart'); };
     r.onspeechstart=function(){ log('[s'+n+'] onspeechstart（発話検知）'); };
     r.onspeechend  =function(){ log('[s'+n+'] onspeechend'); };
     r.onnomatch    =function(){ log('[s'+n+'] onnomatch（認識できず）'); };
     r.onresult=function(ev){
-      gotResult=true;
+      gotResult=true; hideGuide();
       let interim='';
       for(let i=ev.resultIndex;i<ev.results.length;i++){
         const res=ev.results[i];
@@ -146,20 +168,21 @@
     };
     r.onerror=function(ev){
       log('[s'+n+'] onerror: '+ev.error);
-      if((ev.error==='not-allowed'||ev.error==='service-not-allowed') && !gotResult){ want=false; setBtn(); status('音声認識 不可（'+ev.error+'）','ng'); }
+      if(ev.error==='service-not-allowed'){ want=false; setBtn(); status('音声認識がオフ（'+ev.error+'）','ng'); showGuide('speech'); }
+      else if(ev.error==='not-allowed'){ want=false; setBtn(); status('許可されていません（'+ev.error+'）','ng'); showGuide('mic'); }
     };
     r.onend=function(){
-      log('[s'+n+'] onend'+(gotResult?'':' ⚠ onresult が来なかった'));
-      if(!gotResult && n>=2) log('→ 回避策を適用しても《2回目以降 結果なし》を再現');
-      want=false; setBtn(); status(gotResult?'停止（もう一度スタートできます）':'停止（結果なし）','warn');
+      log('[s'+n+'] onend'+(gotResult?'':' ⚠ onresult なし'));
+      want=false; setBtn(); status(gotResult?'停止（もう一度スタートできます）':'停止','warn');
     };
     return r;
   }
 
   async function start(){
-    if($('#useCtx').checked) ensureAudioCtx();                 // ① gesture内でresume
-    if($('#useGum').checked){ if(!await primeMic()){ want=false; setBtn(); return; } }  // ③
-    if($('#useAbort').checked && rec){ try{ rec.abort(); }catch(e){} rec=null; log('前セッションを abort'); }   // ②
+    hideGuide();
+    ensureAudioCtx();                               // ① gesture内でresume＋保持
+    if(!await primeMic()){ want=false; setBtn(); return; }   // ③ warm-up（失敗時は案内表示済み）
+    if(rec){ try{ rec.abort(); }catch(e){} rec=null; }        // ② 前セッションをabort→作り直し
     sess++; gotResult=false;
     log('=== セッション'+sess+' 開始（Ctx:'+(audioCtx?audioCtx.state:'off')+'）===');
     rec=makeRec(sess);
