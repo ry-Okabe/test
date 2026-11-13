@@ -51,6 +51,9 @@
       <button id="startBtn">🎤 音声認識スタート</button>
       <button id="clearBtn" class="ghost">結果をクリア</button>
     </div>
+    <label style="display:flex;align-items:center;gap:8px;color:var(--sub);font-size:13px;margin-top:10px">
+      <input type="checkbox" id="useGum" checked> 開始前に getUserMedia でマイク許可を取る（OFFで挙動を比較）
+    </label>
     <div class="k" style="margin:8px 0 4px">認識結果</div>
     <div id="out"></div>
   </div>
@@ -133,7 +136,9 @@
   }
 
   async function start(){
-    if(!await primeMic()){ want=false; setBtn(); return; }
+    const useGum = $('#useGum') ? $('#useGum').checked : true;
+    if(useGum){ if(!await primeMic()){ want=false; setBtn(); return; } }
+    else { log('getUserMedia プライム OFF → SpeechRecognition に任せる'); }
     sess++; gotResult=false;
     log('=== セッション'+sess+' 開始 ===');
     rec=makeRec(sess);
