@@ -59,6 +59,12 @@
   </div>
 
   <div class="card">
+    <div class="k" style="margin-bottom:6px;color:#6ee7a8">参考：OSキーボードの音声入力（本番で使える方法・何度でも動く）</div>
+    <textarea id="osdict" placeholder="ここをタップ → キーボードのマイク🎤で話す。standaloneでも何回でも入力できます。" style="width:100%;min-height:90px;background:#0b1118;color:var(--txt);border:1px solid #2a3a4d;border-radius:10px;padding:12px;font-size:15px;line-height:1.7;resize:vertical;box-sizing:border-box"></textarea>
+    <div class="k" style="margin-top:6px">※ Web Speech API と違い OS 機能なので、standalone でも制限なく使えます。本番の音声入力はこちらを前提にできます。</div>
+  </div>
+
+  <div class="card">
     <div class="row"><span class="k">イベントログ（セッション番号付き）</span><button class="ghost" style="padding:6px 10px" onclick="clearLog()">クリア</button></div>
     <div id="log"></div>
   </div>
