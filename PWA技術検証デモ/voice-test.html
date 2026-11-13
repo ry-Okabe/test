@@ -56,13 +56,13 @@
   </div>
 
   <div class="card">
-    <div class="row"><span class="k">イベントログ（onstart / speechstart / result / onerror / onend）</span><button class="ghost" style="padding:6px 10px" onclick="clearLog()">クリア</button></div>
+    <div class="row"><span class="k">イベントログ（permission / onstart / result / onerror / onend）</span><button class="ghost" style="padding:6px 10px" onclick="clearLog()">クリア</button></div>
     <div id="log"></div>
   </div>
 
   <div class="note">
-    ※ Web Speech API は端末により<b>音声データが外部（Google 等）へ送信</b>されます（セキュリティ方針 L2 の論点）。<br>
-    ※ iOS 標準／スタンドアロン PWA では音声認識が<b>途中で止まる／一度しか動かない</b>ことがあります。その場合、本番は「<b>OS キーボードの音声入力（ディクテーション）</b>」か「<b>録音＋サーバー文字起こし</b>」を前提にします。
+    ※ 開始時に<b>先にマイク許可を取得</b>してから音声認識を始めます（iOS standalone 対策）。<br>
+    ※ 音声は端末により<b>外部（Google 等）へ送信</b>されます（セキュリティ方針 L2 の論点）。それでも standalone で動かない場合は OSキーボードの音声入力／録音＋サーバー文字起こしを検討します。
   </div>
 </div>
 
@@ -74,7 +74,6 @@
   window.clearLog=function(){ $('#log').textContent=''; };
   function status(t,cls){ $('#st').textContent=t; $('#st').className='v '+(cls||''); }
 
-  // 表示モード（standalone=ホーム画面起動＝本番に近い）
   function dispMode(){
     if(navigator.standalone===true) return 'standalone (iOS)';
     try{ for(const m of ['fullscreen','standalone','minimal-ui']) if(matchMedia('(display-mode: '+m+')').matches) return m; }catch(e){}
@@ -87,13 +86,27 @@
   if(SR){ $('#sr').textContent='対応'; $('#sr').className='v ok'; }
   else { $('#sr').textContent='非対応（この環境では利用不可）'; $('#sr').className='v ng'; $('#startBtn').disabled=true; }
 
-  // want=ユーザーの意図（聞き取り続けたいか）。lifecycleイベントに依存せず状態を持つ。
-  let rec=null, want=false, finalText='', restarts=0;
+  let rec=null, want=false, finalText='', restarts=0, hasResult=false, micGranted=false;
   function setBtn(){ $('#startBtn').textContent = want ? '■ 停止' : '🎤 音声認識スタート'; }
   function render(interim){
     $('#out').innerHTML = (finalText||'') + (interim?'<span class="interim">'+interim+'</span>':'') || '<span class="interim">（ここに認識結果が表示されます）</span>';
   }
   render('');
+
+  // ユーザー操作内で先にマイク許可を取得（iOS standalone 対策）。成功したら即解放。
+  async function primeMic(){
+    if(micGranted) return true;
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ log('getUserMedia 非対応 → 許可取得をスキップして認識を試行'); return true; }
+    try{
+      const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+      stream.getTracks().forEach(t=>t.stop());
+      micGranted=true; log('マイク許可 OK（getUserMedia）'); return true;
+    }catch(e){
+      log('マイク許可 失敗: '+(e.name||'')+' '+(e.message||''));
+      status('マイク不可（'+(e.name||'error')+'）','ng');
+      return false;
+    }
+  }
 
   function makeRec(){
     const r=new SR();
@@ -104,7 +117,7 @@
     r.onspeechend   =function(){ log('onspeechend（発話終了）'); };
     r.onnomatch     =function(){ log('onnomatch（認識できず）'); };
     r.onresult=function(ev){
-      restarts=0;
+      restarts=0; hasResult=true;
       let interim='';
       for(let i=ev.resultIndex;i<ev.results.length;i++){
         const res=ev.results[i];
@@ -115,32 +128,38 @@
     };
     r.onerror=function(ev){
       log('onerror: '+ev.error+(ev.message?(' / '+ev.message):''));
-      if(ev.error==='not-allowed'||ev.error==='service-not-allowed'){ want=false; setBtn(); status('マイク不可（'+ev.error+'）','ng'); }
+      if((ev.error==='not-allowed'||ev.error==='service-not-allowed') && !hasResult){
+        want=false; setBtn(); status('音声認識 不可（'+ev.error+'）','ng');
+      }
     };
     r.onend=function(){
-      // continuous でもブラウザ（特にiOS）が勝手に停止するので、意図が続く限り自動再開
       if(want){
         restarts++;
-        if(restarts>20){ want=false; setBtn(); status('自動再開の上限で停止','warn'); log('onend：自動再開20回でも結果なし → 停止（この端末は実質1回しか動かない可能性）'); return; }
+        if(restarts>20){ want=false; setBtn(); status(hasResult?'停止':'自動再開の上限で停止','warn'); log('onend：自動再開20回でも進展なし → 停止'); return; }
         log('onend → 自動再開（'+restarts+'回目）');
+        // 権限は取得済みなので非ジェスチャでも通ることが多い。失敗したら静かに停止（iOSは毎回タップが要る場合あり）。
         try{ r.start(); }
-        catch(e){ log('同一インスタンス再開失敗: '+e.message+' → 作り直し'); rec=makeRec(); try{ rec.start(); }catch(e2){ log('再作成でも失敗: '+e2.message); want=false; setBtn(); status('停止','warn'); } }
+        catch(e){
+          log('自動再開 失敗: '+e.message+(hasResult?'（iOSは継続にタップが必要な可能性）':''));
+          want=false; setBtn(); status(hasResult?'停止（再開にはタップが必要）':'停止','warn');
+        }
       } else { setBtn(); status('停止','warn'); log('onend（停止）'); }
     };
     return r;
   }
 
+  async function start(){
+    if(!await primeMic()){ want=false; setBtn(); return; }   // 許可が取れなければここで終了
+    rec=makeRec();
+    try{ rec.start(); }
+    catch(e){ log('start例外: '+e.message); want=false; setBtn(); status('開始失敗','ng'); }
+  }
+
   $('#startBtn').onclick=function(){
     if(!SR) return;
-    if(want){ // 停止
-      want=false; setBtn(); status('停止中…','warn');
-      try{ rec && rec.stop(); }catch(e){ log('stop例外: '+e.message); }
-      return;
-    }
-    // 開始（毎回リセットして作り直す）
-    want=true; restarts=0; finalText=''; render(''); setBtn(); status('開始中…','warn');
-    rec=makeRec();
-    try{ rec.start(); }catch(e){ log('start例外: '+e.message+'（直前の認識が終了していない可能性）'); want=false; setBtn(); status('開始失敗','ng'); }
+    if(want){ want=false; setBtn(); status('停止中…','warn'); try{ rec && rec.stop(); }catch(e){ log('stop例外: '+e.message); } return; }
+    want=true; restarts=0; hasResult=false; finalText=''; render(''); setBtn(); status('マイク確認中…','warn');
+    start();
   };
   $('#clearBtn').onclick=function(){ finalText=''; render(''); };
 
