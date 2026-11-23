@@ -61,6 +61,11 @@
 
     <label class="k" for="msg" style="margin-top:12px">メッセージ入力欄（この本文を転送します・編集可）</label>
     <textarea id="msg"></textarea>
+    <div class="row" style="margin-top:6px">
+      <span class="hint" id="cnt">本文 0 文字</span>
+      <button class="ghost" id="longBtn" style="padding:6px 10px">長文を挿入（制限テスト）</button>
+    </div>
+    <div class="hint">※ mailto・各アプリは端末により<b>長文が途中で切れる</b>ことがあります。上のボタンで実機の限界を確認できます。</div>
   </div>
 
   <div class="card">
@@ -96,6 +101,8 @@
     ・<b>OS共有シート</b>が出て LINE/Instagram に渡せれば、転送UXは<b>これ1つで成立</b>（最有力）。<br>
     ・<b>LINEに転送</b>＝ <code>line.me/R/share</code>。LINEアプリがあれば本文入りで送信先選択へ。<br>
     ・<b>Instagram</b>は仕様上、本文のプリセット不可 → <b>コピー＆貼り付け</b>が現実解（設計書どおり）。<br>
+    ・<b>アプリが無い場合</b>：LINE＝自動で<b>LINE Webが開く</b>（https）／Instagram＝アプリ未検出なら<b>Web版へフォールバック</b>（ログに表示）／メール＝<b>無反応になり得る</b>（代替手段なし・検出も困難）。<br>
+    ・<b>文字数</b>：mailto・各アプリとも端末依存で長文は切れることあり。「長文を挿入」で<b>実機の限界を実測</b>してください。<br>
     ・iOSの「ホーム画面に追加→アイコン起動（standalone）」でも同じ挙動かを必ず確認してください。<br>
     ・<b>検証用の注意</b>：本文に実在の氏名・個人情報は入れないでください（ダミーで検証）。URLはUUIDで推測不可。
   </div>
@@ -149,17 +156,48 @@
   function resetMsg(u){ $('#msg').value=template(u); }
   let url0=makeUrl(); setUrl(url0); resetMsg(url0);
 
+  function body(){ return $('#msg').value; }
+  function url(){ return $('#url').value.trim(); }
+
+  // 文字数カウンター
+  function updateCnt(){ $('#cnt').textContent='本文 '+body().length+' 文字'; }
+  $('#msg').addEventListener('input', updateCnt); updateCnt();
+
   $('#regen').onclick=function(){
     const u=makeUrl(); setUrl(u);
     // 本文内の旧URL行を差し替え（編集済み本文も尊重し、URLらしき行だけ置換）
     const cur=$('#msg').value;
     const replaced=cur.replace(/https?:\/\/\S+/, u);
     $('#msg').value = (replaced!==cur)?replaced:template(u);
-    log('URL再発行: '+u);
+    updateCnt(); log('URL再発行: '+u);
   };
 
-  function body(){ return $('#msg').value; }
-  function url(){ return $('#url').value.trim(); }
+  // 長文を挿入して各アプリの文字数制限を実機確認
+  $('#longBtn').onclick=function(){
+    const base=body().replace(/\s+$/,'');
+    let pad=''; const line='あいうえお かきくけこ さしすせそ 0123456789 ';
+    while(pad.length<2600) pad+=line;
+    $('#msg').value=base+'\n\n--- 長文テスト（以下ダミー）---\n'+pad;
+    updateCnt(); log('長文を挿入: '+body().length+'文字（各転送で切れる位置を確認）');
+  };
+
+  // アプリ起動（カスタムスキーム）→ 起動有無を可視判定し、無ければWebへフォールバック
+  function openApp(scheme, webFallback, label){
+    let switched=false;
+    const onHide=function(){ switched=true; };
+    document.addEventListener('visibilitychange', onHide, {once:true});
+    window.addEventListener('pagehide', onHide, {once:true});
+    setTimeout(function(){
+      document.removeEventListener('visibilitychange', onHide);
+      window.removeEventListener('pagehide', onHide);
+      if(switched || document.hidden){ log(label+'：アプリが起動しました（前面に切替）'); }
+      else {
+        if(webFallback){ log(label+'：アプリ未検出 → Web版にフォールバック'); location.href=webFallback; }
+        else log(label+'：アプリ未検出（代替手段なし）');
+      }
+    }, 1500);
+    try{ location.href=scheme; }catch(e){ if(webFallback) location.href=webFallback; }
+  }
 
   // ① OS共有シート（最有力）
   $('#shareBtn').onclick=async function(){
@@ -176,31 +214,34 @@
     }
   };
 
-  // ② LINEに転送（line.me/R/share?text=）
+  // ② LINEに転送（line.me/R/share?text=）＝httpsなのでアプリ無しでもLINE Webが開く
   $('#lineBtn').onclick=function(){
     const u='https://line.me/R/share?text='+encodeURIComponent(body());
-    log('LINE起動: '+u.slice(0,60)+'…');
+    log('LINE転送（'+body().length+'文字）／アプリ無しの場合はLINE Webが開きます');
     location.href=u;
   };
 
-  // ② Instagram（本文プリセット不可 → コピー＋起動）
+  // ② Instagram（本文プリセット不可 → コピー＋起動／未インストールはWeb版へ）
   $('#instaBtn').onclick=async function(){
     const ok=await copyText(body());
-    log(ok?'本文をコピー済み → Instagram起動':'コピー失敗 → それでもInstagram起動を試行');
-    // アプリ優先 → 無ければWebへ（1.2秒でフォールバック）
-    let moved=false;
-    const back=function(){ if(!moved){ moved=true; location.href='https://www.instagram.com/direct/inbox/'; } };
-    setTimeout(back,1200);
-    try{ location.href='instagram://direct-inbox'; }catch(e){ back(); }
+    log(ok?'本文をコピー済み（'+body().length+'文字）→ Instagram起動':'コピー失敗 → 手動コピーしてください');
     alert(ok?'本文をコピーしました。Instagramが開いたら、DMのメッセージ欄を長押し→「ペースト」で貼り付けて送信してください。'
             :'コピーに失敗しました。本文を手動で選択してコピーしてください。');
+    openApp('instagram://direct-inbox','https://www.instagram.com/direct/inbox/','Instagram');
   };
 
-  // ② メール（mailto）
+  // ② メール（mailto）＝代替URLが無いため、無反応時は検出してログ表示
   $('#mailBtn').onclick=function(){
-    const subj='テストメッセージ';
-    const u='mailto:?subject='+encodeURIComponent(subj)+'&body='+encodeURIComponent(body());
-    log('メーラー起動（mailto, '+body().length+'文字）');
+    const u='mailto:?subject='+encodeURIComponent('テストメッセージ')+'&body='+encodeURIComponent(body());
+    log('mailto起動（'+body().length+'文字）');
+    let switched=false; const onHide=function(){ switched=true; };
+    document.addEventListener('visibilitychange', onHide, {once:true});
+    window.addEventListener('pagehide', onHide, {once:true});
+    setTimeout(function(){
+      document.removeEventListener('visibilitychange', onHide);
+      window.removeEventListener('pagehide', onHide);
+      if(!(switched||document.hidden)) log('⚠ 画面が切り替わりません＝メールアプリが未設定/無しの可能性（mailtoは代替手段なし）');
+    }, 1500);
     location.href=u;
   };
 
