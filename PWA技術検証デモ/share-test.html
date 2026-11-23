@@ -41,7 +41,7 @@
   <a class="back" href="../index.html">← 検証ハブに戻る</a>
   <h1>PWA メッセージ転送テスト <span id="mode" class="pill"></span></h1>
   <div class="sub">
-    カウンセリング結果URLの<b>共有操作（パターン①：外部アプリ連携）</b>を実機で検証します。<br>
+    結果URL（メッセージ）の<b>転送（外部アプリ連携）</b>を実機で検証します。<br>
     下の<b>メッセージ入力欄</b>に本文を入れ、<b>LINE / Instagram / メール</b>へ転送できるかを確認します。
   </div>
 
@@ -97,7 +97,7 @@
     ・<b>LINEに転送</b>＝ <code>line.me/R/share</code>。LINEアプリがあれば本文入りで送信先選択へ。<br>
     ・<b>Instagram</b>は仕様上、本文のプリセット不可 → <b>コピー＆貼り付け</b>が現実解（設計書どおり）。<br>
     ・iOSの「ホーム画面に追加→アイコン起動（standalone）」でも同じ挙動かを必ず確認してください。<br>
-    ・<b>個人情報保護</b>：本文には苗字・来店日時のみ。URLはUUIDで推測不可（WAF併用）。
+    ・<b>検証用の注意</b>：本文に実在の氏名・個人情報は入れないでください（ダミーで検証）。URLはUUIDで推測不可。
   </div>
 </div>
 
@@ -137,13 +137,13 @@
     try{ if(crypto&&crypto.randomUUID) return crypto.randomUUID(); }catch(e){}
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,function(c){const r=Math.random()*16|0;const v=c==='x'?r:(r&0x3|0x8);return v.toString(16);});
   }
-  function makeUrl(){ return 'https://cota-result.example.com/r/'+uuid(); }
+  function makeUrl(){ return 'https://test.example.com/r/'+uuid(); }
   function template(url){
-    return '田中 様\n\n'
-      +'本日はご来店ありがとうございました。\n'
-      +'カウンセリング結果を下記よりご確認いただけます。\n\n'
+    return '〇〇 様\n\n'
+      +'テストメッセージです。\n'
+      +'下記URLをご確認ください。\n\n'
       +url+'\n\n'
-      +'※リンクはご本人様限りです。第三者への共有はお控えください。';
+      +'※このリンクはテスト用です。';
   }
   function setUrl(u){ $('#url').value=u; }
   function resetMsg(u){ $('#msg').value=template(u); }
@@ -164,7 +164,7 @@
   // ① OS共有シート（最有力）
   $('#shareBtn').onclick=async function(){
     if(!hasShare){ log('✗ Web Share API 非対応。②の個別ボタンで検証してください。'); alert('この環境は OS共有シート（Web Share API）に非対応です。②の個別転送ボタンをお試しください。'); return; }
-    const data={ title:'カウンセリング結果', text:body() };   // URLは本文に含めて渡す（text+url併用は一部OSで片方無視のため）
+    const data={ title:'メッセージ', text:body() };   // URLは本文に含めて渡す（text+url併用は一部OSで片方無視のため）
     try{
       if(navigator.canShare && !navigator.canShare(data)){ log('canShare=false（この内容は共有不可）'); }
       log('navigator.share 呼び出し…');
@@ -198,7 +198,7 @@
 
   // ② メール（mailto）
   $('#mailBtn').onclick=function(){
-    const subj='カウンセリング結果のご案内';
+    const subj='テストメッセージ';
     const u='mailto:?subject='+encodeURIComponent(subj)+'&body='+encodeURIComponent(body());
     log('メーラー起動（mailto, '+body().length+'文字）');
     location.href=u;
