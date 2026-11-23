@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>PWA メッセージ転送テスト</title>
+<style>
+  :root{--bg:#0f1720;--card:#1b2634;--accent:#2f6fed;--line:#06C755;--insta:#E1306C;--mail:#8a93a5;--ok:#1f9d55;--warn:#d98a1b;--ng:#e5484d;--txt:#e8eef5;--sub:#9fb0c3}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font-family:-apple-system,"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif}
+  #app{padding:20px;max-width:720px;margin:0 auto}
+  a.back{color:var(--sub);font-size:13px;text-decoration:none}
+  h1{font-size:18px;margin:8px 0 4px}
+  .sub{color:var(--sub);font-size:13px;margin-bottom:14px;line-height:1.7}
+  .card{background:var(--card);border-radius:12px;padding:14px 16px;margin:10px 0}
+  .row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:6px 0}
+  .k{color:var(--sub);font-size:13px}.v{font-weight:700;font-size:15px}
+  .v.ok{color:#6ee7a8}.v.ng{color:#ff9a9d}.v.warn{color:#ffce83}
+  label.k{display:block;margin:2px 0 6px}
+  input[type=text],textarea{width:100%;background:#0b1118;color:var(--txt);border:1px solid #2a3a4d;border-radius:8px;padding:11px 12px;font:inherit;line-height:1.7}
+  textarea{min-height:140px;resize:vertical}
+  .controls{display:flex;flex-wrap:wrap;gap:10px;margin:6px 0}
+  button{font:inherit;font-weight:700;border:0;border-radius:10px;padding:13px 16px;color:#fff;background:var(--accent);cursor:pointer}
+  button.line{background:var(--line)}
+  button.insta{background:var(--insta)}
+  button.mail{background:#51607a}
+  button.ghost{background:#243247;color:#cfe3ff}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  .big{width:100%;justify-content:center;font-size:16px;padding:15px}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;background:rgba(47,111,237,.2);color:#9dc0ff}
+  #log{height:180px;overflow:auto;background:#0b1118;border-radius:10px;padding:10px;font:12px/1.5 ui-monospace,Menlo,monospace;color:#cfe3ff;white-space:pre-wrap}
+  .note{background:#17202b;border:1px solid #27374a;border-radius:10px;padding:10px 12px;font-size:12px;color:var(--sub);margin-top:12px;line-height:1.9}
+  .note b{color:#cfe3ff}
+  .hint{font-size:12px;color:var(--sub);margin:4px 0 0}
+</style>
+</head>
+<body>
+<div id="app">
+  <a class="back" href="../index.html">← 検証ハブに戻る</a>
+  <h1>PWA メッセージ転送テスト <span id="mode" class="pill"></span></h1>
+  <div class="sub">
+    カウンセリング結果URLの<b>共有操作（パターン①：外部アプリ連携）</b>を実機で検証します。<br>
+    下の<b>メッセージ入力欄</b>に本文を入れ、<b>LINE / Instagram / メール</b>へ転送できるかを確認します。
+  </div>
+
+  <div class="card">
+    <div class="row"><span class="k">表示モード</span><span class="v" id="dm">—</span></div>
+    <div class="row"><span class="k">OS共有シート (Web Share API)</span><span class="v" id="ws">—</span></div>
+    <div class="row"><span class="k">クリップボード (Clipboard API)</span><span class="v" id="cb">—</span></div>
+    <div class="row"><span class="k">プラットフォーム</span><span class="v" id="pf">—</span></div>
+  </div>
+
+  <div class="card">
+    <label class="k" for="url">結果URL（UUID v4・推測不可）</label>
+    <input type="text" id="url" />
+    <div class="controls" style="margin-top:6px">
+      <button class="ghost" id="regen" style="padding:8px 12px">URLを再発行</button>
+    </div>
+
+    <label class="k" for="msg" style="margin-top:12px">メッセージ入力欄（この本文を転送します・編集可）</label>
+    <textarea id="msg"></textarea>
+  </div>
+
+  <div class="card">
+    <div class="k" style="margin-bottom:8px">① まずはこれ ＝ OS標準の共有（LINE・Instagram等が一覧に出ます）</div>
+    <button class="big" id="shareBtn">📤 OS共有シートで転送する</button>
+    <div class="hint">※ iOS Safari / Android Chrome の「共有ボタン」と同じ。出てきた一覧から LINE や Instagram を選びます。</div>
+  </div>
+
+  <div class="card">
+    <div class="k" style="margin-bottom:8px">② アプリを直接ひらく（個別検証用）</div>
+    <div class="controls">
+      <button class="line"  id="lineBtn">💬 LINEに転送</button>
+      <button class="insta" id="instaBtn">📷 Instagramに転送</button>
+      <button class="mail"  id="mailBtn">✉️ メールに転送</button>
+    </div>
+    <div class="controls" style="margin-top:4px">
+      <button class="ghost" id="copyBtn">📋 本文をコピー</button>
+    </div>
+    <div class="hint">
+      💬 LINE＝本文入りで起動し送信先を選択。<br>
+      📷 Instagram＝アプリ仕様で本文の自動入力ができないため、<b>本文を自動コピー→Instagram起動→DMで長押し貼り付け</b>。<br>
+      ✉️ メール＝件名・本文入りでメーラー起動、宛先を入力。
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row"><span class="k">イベントログ</span><button class="ghost" style="padding:6px 10px" onclick="clearLog()">クリア</button></div>
+    <div id="log"></div>
+  </div>
+
+  <div class="note">
+    <b>検証の見方</b><br>
+    ・<b>OS共有シート</b>が出て LINE/Instagram に渡せれば、転送UXは<b>これ1つで成立</b>（最有力）。<br>
+    ・<b>LINEに転送</b>＝ <code>line.me/R/share</code>。LINEアプリがあれば本文入りで送信先選択へ。<br>
+    ・<b>Instagram</b>は仕様上、本文のプリセット不可 → <b>コピー＆貼り付け</b>が現実解（設計書どおり）。<br>
+    ・iOSの「ホーム画面に追加→アイコン起動（standalone）」でも同じ挙動かを必ず確認してください。<br>
+    ・<b>個人情報保護</b>：本文には苗字・来店日時のみ。URLはUUIDで推測不可（WAF併用）。
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  const $=s=>document.querySelector(s);
+  function log(m){ const d=new Date(); const t=d.toLocaleTimeString('ja-JP',{hour12:false})+'.'+String(d.getMilliseconds()).padStart(3,'0'); const el=$('#log'); el.textContent+='['+t+'] '+m+'\n'; el.scrollTop=el.scrollHeight; }
+  window.clearLog=function(){ $('#log').textContent=''; };
+
+  // 表示モード
+  function dispMode(){
+    if(navigator.standalone===true) return 'standalone (iOS)';
+    try{ for(const m of ['fullscreen','standalone','minimal-ui']) if(matchMedia('(display-mode: '+m+')').matches) return m; }catch(e){}
+    return 'browser';
+  }
+  const dm=dispMode();
+  $('#dm').textContent=dm; $('#dm').className='v '+(dm==='browser'?'warn':'ok'); $('#mode').textContent=dm;
+
+  // プラットフォーム
+  const ua=navigator.userAgent;
+  const isIOS=/iphone|ipad|ipod/i.test(ua)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+  const isAndroid=/android/i.test(ua);
+  $('#pf').textContent=isIOS?'iOS (iPhone/iPad)':isAndroid?'Android':'PC / その他';
+  $('#pf').className='v';
+
+  // 機能判定
+  const hasShare=typeof navigator.share==='function';
+  $('#ws').textContent=hasShare?'対応':'非対応（この環境では不可）';
+  $('#ws').className='v '+(hasShare?'ok':'ng');
+  const hasClip=!!(navigator.clipboard&&navigator.clipboard.writeText);
+  $('#cb').textContent=hasClip?'対応':'非対応（execCommandで代替）';
+  $('#cb').className='v '+(hasClip?'ok':'warn');
+
+  // UUID付きURL
+  function uuid(){
+    try{ if(crypto&&crypto.randomUUID) return crypto.randomUUID(); }catch(e){}
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,function(c){const r=Math.random()*16|0;const v=c==='x'?r:(r&0x3|0x8);return v.toString(16);});
+  }
+  function makeUrl(){ return 'https://cota-result.example.com/r/'+uuid(); }
+  function template(url){
+    return '田中 様\n\n'
+      +'本日はご来店ありがとうございました。\n'
+      +'カウンセリング結果を下記よりご確認いただけます。\n\n'
+      +url+'\n\n'
+      +'※リンクはご本人様限りです。第三者への共有はお控えください。';
+  }
+  function setUrl(u){ $('#url').value=u; }
+  function resetMsg(u){ $('#msg').value=template(u); }
+  let url0=makeUrl(); setUrl(url0); resetMsg(url0);
+
+  $('#regen').onclick=function(){
+    const u=makeUrl(); setUrl(u);
+    // 本文内の旧URL行を差し替え（編集済み本文も尊重し、URLらしき行だけ置換）
+    const cur=$('#msg').value;
+    const replaced=cur.replace(/https?:\/\/\S+/, u);
+    $('#msg').value = (replaced!==cur)?replaced:template(u);
+    log('URL再発行: '+u);
+  };
+
+  function body(){ return $('#msg').value; }
+  function url(){ return $('#url').value.trim(); }
+
+  // ① OS共有シート（最有力）
+  $('#shareBtn').onclick=async function(){
+    if(!hasShare){ log('✗ Web Share API 非対応。②の個別ボタンで検証してください。'); alert('この環境は OS共有シート（Web Share API）に非対応です。②の個別転送ボタンをお試しください。'); return; }
+    const data={ title:'カウンセリング結果', text:body() };   // URLは本文に含めて渡す（text+url併用は一部OSで片方無視のため）
+    try{
+      if(navigator.canShare && !navigator.canShare(data)){ log('canShare=false（この内容は共有不可）'); }
+      log('navigator.share 呼び出し…');
+      await navigator.share(data);
+      log('✓ 共有シート完了（送信アプリへ引き渡し）');
+    }catch(e){
+      if(e && e.name==='AbortError') log('… 共有をキャンセル（ユーザー操作）');
+      else log('✗ share失敗: '+((e&&e.name)||'')+' '+((e&&e.message)||''));
+    }
+  };
+
+  // ② LINEに転送（line.me/R/share?text=）
+  $('#lineBtn').onclick=function(){
+    const u='https://line.me/R/share?text='+encodeURIComponent(body());
+    log('LINE起動: '+u.slice(0,60)+'…');
+    location.href=u;
+  };
+
+  // ② Instagram（本文プリセット不可 → コピー＋起動）
+  $('#instaBtn').onclick=async function(){
+    const ok=await copyText(body());
+    log(ok?'本文をコピー済み → Instagram起動':'コピー失敗 → それでもInstagram起動を試行');
+    // アプリ優先 → 無ければWebへ（1.2秒でフォールバック）
+    let moved=false;
+    const back=function(){ if(!moved){ moved=true; location.href='https://www.instagram.com/direct/inbox/'; } };
+    setTimeout(back,1200);
+    try{ location.href='instagram://direct-inbox'; }catch(e){ back(); }
+    alert(ok?'本文をコピーしました。Instagramが開いたら、DMのメッセージ欄を長押し→「ペースト」で貼り付けて送信してください。'
+            :'コピーに失敗しました。本文を手動で選択してコピーしてください。');
+  };
+
+  // ② メール（mailto）
+  $('#mailBtn').onclick=function(){
+    const subj='カウンセリング結果のご案内';
+    const u='mailto:?subject='+encodeURIComponent(subj)+'&body='+encodeURIComponent(body());
+    log('メーラー起動（mailto, '+body().length+'文字）');
+    location.href=u;
+  };
+
+  // 本文コピー
+  $('#copyBtn').onclick=async function(){ const ok=await copyText(body()); log(ok?'✓ 本文をコピーしました':'✗ コピー失敗'); if(ok) flash($('#copyBtn'),'📋 コピー済み'); };
+
+  async function copyText(t){
+    try{ if(hasClip){ await navigator.clipboard.writeText(t); return true; } }catch(e){ log('clipboard.writeText失敗: '+e.message); }
+    try{ const ta=document.createElement('textarea'); ta.value=t; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.focus(); ta.select(); const ok=document.execCommand('copy'); document.body.removeChild(ta); return ok; }
+    catch(e){ log('execCommand失敗: '+e.message); return false; }
+  }
+  function flash(btn,txt){ const o=btn.textContent; btn.textContent=txt; setTimeout(function(){ btn.textContent=o; },1200); }
+
+  log('起動：mode='+dm+' / WebShare='+(hasShare?'あり':'なし')+' / Clipboard='+(hasClip?'あり':'なし'));
+})();
+</script>
+</body>
+</html>
