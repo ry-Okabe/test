@@ -34,6 +34,12 @@
   .note{background:#17202b;border:1px solid #27374a;border-radius:10px;padding:10px 12px;font-size:12px;color:var(--sub);margin-top:12px;line-height:1.9}
   .note b{color:#cfe3ff}
   .hint{font-size:12px;color:var(--sub);margin:4px 0 0}
+  .encbox{background:#0b1118;border:1px solid #2a3a4d;border-radius:8px;padding:10px 12px;margin-top:8px;font:12px/1.9 ui-monospace,Menlo,monospace}
+  .encrow{display:flex;justify-content:space-between;gap:10px}
+  .encrow .lab{color:var(--sub)}
+  .encrow .num{font-weight:700;color:#cfe3ff}
+  .encrow .num.ok{color:#6ee7a8}.encrow .num.warn{color:#ffce83}.encrow .num.ng{color:#ff9a9d}
+  .encnote{color:var(--sub);margin-top:6px;font-size:11px}
 </style>
 </head>
 <body>
@@ -61,11 +67,13 @@
 
     <label class="k" for="msg" style="margin-top:12px">メッセージ入力欄（この本文を転送します・編集可）</label>
     <textarea id="msg"></textarea>
-    <div class="row" style="margin-top:6px">
-      <span class="hint" id="cnt">本文 0 文字</span>
-      <button class="ghost" id="longBtn" style="padding:6px 10px">長文を挿入（制限テスト）</button>
+    <div class="controls" style="margin-top:6px">
+      <button class="ghost" id="add100" style="padding:8px 12px">＋日本語100字</button>
+      <button class="ghost" id="del100" style="padding:8px 12px">－100字</button>
+      <button class="ghost" id="resetBtn" style="padding:8px 12px">本文リセット</button>
     </div>
-    <div class="hint">※ mailto・各アプリは端末により<b>長文が途中で切れる</b>ことがあります。上のボタンで実機の限界を確認できます。</div>
+    <div class="encbox" id="enc"></div>
+    <div class="encnote">※ 実際にURLで送られるのは<b>エンコード後</b>の長さです（日本語1字＝約9字に膨張）。LINE/メールは<b>URL全体の長さ</b>で頭打ちになります（目安：緑〜1000 / 橙〜2000 / 赤 超過）。</div>
   </div>
 
   <div class="card">
@@ -99,7 +107,7 @@
   <div class="note">
     <b>検証の見方</b><br>
     ・<b>OS共有シート</b>が出て LINE/Instagram に渡せれば、転送UXは<b>これ1つで成立</b>（最有力）。<br>
-    ・<b>LINEに転送</b>＝ <code>line.me/R/share</code>。LINEアプリがあれば本文入りで送信先選択へ。<br>
+    ・<b>LINEに転送</b>＝ <code>line.me/R/share</code>。公式の文字数上限は非公開で、実際は<b>URL全体の長さ</b>で頭打ち（日本語はエンコードで約9倍）。上の「＋日本語100字」で<b>切れる位置を実機実測</b>してください。<br>
     ・<b>Instagram</b>は仕様上、本文のプリセット不可 → <b>コピー＆貼り付け</b>が現実解（設計書どおり）。<br>
     ・<b>アプリが無い場合</b>：LINE＝自動で<b>LINE Webが開く</b>（https）／Instagram＝アプリ未検出なら<b>Web版へフォールバック</b>（ログに表示）／メール＝<b>無反応になり得る</b>（代替手段なし・検出も困難）。<br>
     ・<b>文字数</b>：mailto・各アプリとも端末依存で長文は切れることあり。「長文を挿入」で<b>実機の限界を実測</b>してください。<br>
@@ -159,9 +167,23 @@
   function body(){ return $('#msg').value; }
   function url(){ return $('#url').value.trim(); }
 
-  // 文字数カウンター
-  function updateCnt(){ $('#cnt').textContent='本文 '+body().length+' 文字'; }
-  $('#msg').addEventListener('input', updateCnt); updateCnt();
+  // 転送URLの生成（本文はエンコード）
+  function enc(s){ return encodeURIComponent(s); }
+  function lineUrl(){ return 'https://line.me/R/share?text='+enc(body()); }
+  function mailUrl(){ return 'mailto:?subject='+enc('テストメッセージ')+'&body='+enc(body()); }
+  function grade(n){ return n<1000?'ok':(n<2000?'warn':'ng'); }   // 目安（URL長）
+
+  // エンコード後の文字数表示（設計時の目安）
+  function renderEnc(){
+    const raw=body().length, e=enc(body()).length, lu=lineUrl().length, mu=mailUrl().length;
+    function r(lab,num,cls){ return '<div class="encrow"><span class="lab">'+lab+'</span><span class="num '+(cls||'')+'">'+num+' 文字</span></div>'; }
+    $('#enc').innerHTML =
+      r('素の文字数', raw) +
+      r('URLエンコード後（本文のみ）', e) +
+      r('LINE 共有URL 全体', lu, grade(lu)) +
+      r('メール mailto 全体', mu, grade(mu));
+  }
+  $('#msg').addEventListener('input', renderEnc); renderEnc();
 
   $('#regen').onclick=function(){
     const u=makeUrl(); setUrl(u);
@@ -169,17 +191,21 @@
     const cur=$('#msg').value;
     const replaced=cur.replace(/https?:\/\/\S+/, u);
     $('#msg').value = (replaced!==cur)?replaced:template(u);
-    updateCnt(); log('URL再発行: '+u);
+    renderEnc(); log('URL再発行: '+u);
   };
 
-  // 長文を挿入して各アプリの文字数制限を実機確認
-  $('#longBtn').onclick=function(){
-    const base=body().replace(/\s+$/,'');
-    let pad=''; const line='あいうえお かきくけこ さしすせそ 0123456789 ';
-    while(pad.length<2600) pad+=line;
-    $('#msg').value=base+'\n\n--- 長文テスト（以下ダミー）---\n'+pad;
-    updateCnt(); log('長文を挿入: '+body().length+'文字（各転送で切れる位置を確認）');
+  // 日本語を100文字ずつ追加／削除（五十音を繰り返し、きっちり100字）
+  const GOJUON='あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん';
+  function jp100(){ let s=''; while(s.length<100) s+=GOJUON; return s.slice(0,100); }
+  $('#add100').onclick=function(){
+    $('#msg').value += jp100(); renderEnc();
+    log('日本語100字を追加 → 素 '+body().length+'字／エンコード後 '+enc(body()).length+'字／LINE-URL '+lineUrl().length+'字');
   };
+  $('#del100').onclick=function(){
+    $('#msg').value = body().slice(0, Math.max(0, body().length-100)); renderEnc();
+    log('100字を削除 → 素 '+body().length+'字／エンコード後 '+enc(body()).length+'字');
+  };
+  $('#resetBtn').onclick=function(){ resetMsg(url()||url0); renderEnc(); log('本文をリセット'); };
 
   // アプリ起動（カスタムスキーム）→ 起動有無を可視判定し、無ければWebへフォールバック
   function openApp(scheme, webFallback, label){
@@ -216,8 +242,8 @@
 
   // ② LINEに転送（line.me/R/share?text=）＝httpsなのでアプリ無しでもLINE Webが開く
   $('#lineBtn').onclick=function(){
-    const u='https://line.me/R/share?text='+encodeURIComponent(body());
-    log('LINE転送（'+body().length+'文字）／アプリ無しの場合はLINE Webが開きます');
+    const u=lineUrl();
+    log('LINE転送（素'+body().length+'字／URL全体'+u.length+'字）／アプリ無しの場合はLINE Webが開きます');
     location.href=u;
   };
 
@@ -232,8 +258,8 @@
 
   // ② メール（mailto）＝代替URLが無いため、無反応時は検出してログ表示
   $('#mailBtn').onclick=function(){
-    const u='mailto:?subject='+encodeURIComponent('テストメッセージ')+'&body='+encodeURIComponent(body());
-    log('mailto起動（'+body().length+'文字）');
+    const u=mailUrl();
+    log('mailto起動（素'+body().length+'字／URL全体'+u.length+'字）');
     let switched=false; const onHide=function(){ switched=true; };
     document.addEventListener('visibilitychange', onHide, {once:true});
     window.addEventListener('pagehide', onHide, {once:true});
