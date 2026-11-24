@@ -83,19 +83,26 @@
   </div>
 
   <div class="card">
-    <div class="k" style="margin-bottom:8px">② アプリを直接ひらく（個別検証用）</div>
+    <div class="k" style="margin-bottom:8px">② アプリを直接ひらく（個別検証用）／<b>未インストール時の遷移先を Web版・ストア の2種類で比較</b></div>
+    <div class="k" style="margin:6px 0 4px;color:#6ee7a8">💬 LINE</div>
     <div class="controls">
-      <button class="line"  id="lineBtn">💬 LINEに転送</button>
-      <button class="insta" id="instaBtn">📷 Instagramに転送</button>
-      <button class="mail"  id="mailBtn">✉️ メールに転送</button>
+      <button class="line"  id="lineWebBtn">💬 LINE（未インストール→Web版）</button>
+      <button class="line"  id="lineStoreBtn">💬 LINE（未インストール→ストア）</button>
     </div>
-    <div class="controls" style="margin-top:4px">
+    <div class="k" style="margin:10px 0 4px;color:#ffa8c7">📷 Instagram</div>
+    <div class="controls">
+      <button class="insta" id="instaWebBtn">📷 Instagram（未インストール→Web版）</button>
+      <button class="insta" id="instaStoreBtn">📷 Instagram（未インストール→ストア）</button>
+    </div>
+    <div class="controls" style="margin-top:10px">
+      <button class="mail"  id="mailBtn">✉️ メールに転送</button>
       <button class="ghost" id="copyBtn">📋 本文をコピー</button>
     </div>
     <div class="hint">
-      💬 LINE＝本文入りで起動し送信先を選択。<br>
-      📷 Instagram＝アプリ仕様で本文の自動入力ができないため、<b>本文を自動コピー→Instagram起動→DMで長押し貼り付け</b>。<br>
-      ✉️ メール＝件名・本文入りでメーラー起動、宛先を入力。
+      ・<b>Web版</b>＝アプリが無ければブラウザ版（LINE Web／Instagram Web）へ。<br>
+      ・<b>ストア</b>＝アプリが無ければ App Store／Google Play へ（インストール誘導）。<br>
+      ・判定はタイムアウト方式（アプリが前面に出なければ未インストールとみなす）＝100%正確ではありません。イベントログに結果が出ます。<br>
+      ・📷 Instagram は本文の自動入力不可のため、起動前に<b>本文を自動コピー</b>（DMで長押し貼り付け）。
     </div>
   </div>
 
@@ -207,8 +214,14 @@
   };
   $('#resetBtn').onclick=function(){ resetMsg(url()||url0); renderEnc(); log('本文をリセット'); };
 
-  // アプリ起動（カスタムスキーム）→ 起動有無を可視判定し、無ければWebへフォールバック
-  function openApp(scheme, webFallback, label){
+  // 未インストール時の遷移先（プラットフォーム別ストアURL）
+  const STORE = {
+    line:    isIOS ? 'https://apps.apple.com/jp/app/id443904275' : 'https://play.google.com/store/apps/details?id=jp.naver.line.android',
+    insta:   isIOS ? 'https://apps.apple.com/jp/app/id389801252' : 'https://play.google.com/store/apps/details?id=com.instagram.android',
+  };
+
+  // アプリ起動（カスタムスキーム）→ 起動有無を可視判定し、未検出なら fallback へ（fallbackName=Web版/ストア）
+  function openApp(scheme, fallbackUrl, label, fallbackName){
     let switched=false;
     const onHide=function(){ switched=true; };
     document.addEventListener('visibilitychange', onHide, {once:true});
@@ -218,11 +231,11 @@
       window.removeEventListener('pagehide', onHide);
       if(switched || document.hidden){ log(label+'：アプリが起動しました（前面に切替）'); }
       else {
-        if(webFallback){ log(label+'：アプリ未検出 → Web版にフォールバック'); location.href=webFallback; }
+        if(fallbackUrl){ log(label+'：アプリ未検出 → '+(fallbackName||'フォールバック')+'へ遷移'); location.href=fallbackUrl; }
         else log(label+'：アプリ未検出（代替手段なし）');
       }
     }, 1500);
-    try{ location.href=scheme; }catch(e){ if(webFallback) location.href=webFallback; }
+    try{ location.href=scheme; }catch(e){ if(fallbackUrl) location.href=fallbackUrl; }
   }
 
   // ① OS共有シート（最有力）
@@ -240,20 +253,31 @@
     }
   };
 
-  // ② LINEに転送（line.me/R/share?text=）＝httpsなのでアプリ無しでもLINE Webが開く
-  $('#lineBtn').onclick=function(){
+  // ② LINE（Web誘導）＝https の line.me/R/share。アプリ無しは LINE Web が開く（OS任せ）
+  $('#lineWebBtn').onclick=function(){
     const u=lineUrl();
-    log('LINE転送（素'+body().length+'字／URL全体'+u.length+'字）／アプリ無しの場合はLINE Webが開きます');
+    log('LINE[Web誘導] 転送（素'+body().length+'字／URL全体'+u.length+'字）／未インストール時はLINE Webへ');
     location.href=u;
   };
+  // ② LINE（ストア誘導）＝カスタムスキームを試し、未検出ならストアへ
+  $('#lineStoreBtn').onclick=function(){
+    log('LINE[ストア誘導] 起動を試行（未検出ならストアへ）');
+    openApp('line://msg/text/?'+enc(body()), STORE.line, 'LINE[ストア誘導]', 'ストア');
+  };
 
-  // ② Instagram（本文プリセット不可 → コピー＋起動／未インストールはWeb版へ）
-  $('#instaBtn').onclick=async function(){
+  // ② Instagram（Web誘導）＝本文コピー→アプリ試行、未検出なら Web版 DM へ
+  $('#instaWebBtn').onclick=async function(){
     const ok=await copyText(body());
-    log(ok?'本文をコピー済み（'+body().length+'文字）→ Instagram起動':'コピー失敗 → 手動コピーしてください');
-    alert(ok?'本文をコピーしました。Instagramが開いたら、DMのメッセージ欄を長押し→「ペースト」で貼り付けて送信してください。'
-            :'コピーに失敗しました。本文を手動で選択してコピーしてください。');
-    openApp('instagram://direct-inbox','https://www.instagram.com/direct/inbox/','Instagram');
+    log(ok?'本文をコピー済み（'+body().length+'字）→ Instagram[Web誘導]起動':'コピー失敗 → 手動コピーしてください');
+    alert(ok?'本文をコピーしました。Instagramが開いたら、DMのメッセージ欄を長押し→「ペースト」で貼り付けて送信してください。':'コピーに失敗しました。本文を手動でコピーしてください。');
+    openApp('instagram://direct-inbox', 'https://www.instagram.com/direct/inbox/', 'Instagram[Web誘導]', 'Web版');
+  };
+  // ② Instagram（ストア誘導）＝本文コピー→アプリ試行、未検出なら App Store/Play へ
+  $('#instaStoreBtn').onclick=async function(){
+    const ok=await copyText(body());
+    log(ok?'本文をコピー済み（'+body().length+'字）→ Instagram[ストア誘導]起動':'コピー失敗 → 手動コピーしてください');
+    alert(ok?'本文をコピーしました。Instagramが開いたら、DMのメッセージ欄を長押し→「ペースト」で貼り付けて送信してください。':'コピーに失敗しました。本文を手動でコピーしてください。');
+    openApp('instagram://direct-inbox', STORE.insta, 'Instagram[ストア誘導]', 'ストア');
   };
 
   // ② メール（mailto）＝代替URLが無いため、無反応時は検出してログ表示
