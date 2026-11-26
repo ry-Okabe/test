@@ -70,12 +70,12 @@
   <h2>検証を開始</h2>
   <div class="actions">
     <button id="btnSame" class="alt">① 同一オリジンの旬報店モックでログイン</button>
-    <button id="btnCross">② クロスオリジン往復（本命・iOSの要確認点）</button>
+    <button id="btnCross">② 別オリジンの旬報店モックでログイン（本命・iOS要確認）</button>
   </div>
   <div style="margin:8px 0">
     <div class="card">
-      <p class="k">クロスオリジン用リダイレクタ（②で使用・変更可）</p>
-      <input type="text" id="redir" value="https://httpbingo.org/redirect-to">
+      <p class="k">② 別オリジンの旬報店モックURL（別オリジン・変更可）</p>
+      <input type="text" id="cross" value="https://raw.githack.com/ry-Okabe/test/main/PWA%E6%8A%80%E8%A1%93%E6%A4%9C%E8%A8%BC%E3%83%87%E3%83%A2/idp-mock.html">
       <p class="k" style="margin-top:6px">③ 将来の旬報店 authorize URL を直接試す（任意）</p>
       <input type="text" id="custom" placeholder="例）https://idp.junpoten.example/authorize">
       <div class="actions"><button id="btnCustom" class="ghost">③ このURLでログイン開始</button></div>
@@ -97,7 +97,7 @@
         <li><b>戻り先がブラウザ（Safari）になった＝要対策</b>：ログインは出来てもアプリの外（Safari）に出てしまう。iOSのスタンドアロンPWAで起きやすい挙動。対策候補＝<code>window.open</code>別方式／カスタムURIスキーム／ユニバーサルリンクでアプリに戻す等。</li>
         <li><b>state / PKCE(verifier) の保持</b>：<code>sessionStorage</code>が失われ<code>localStorage</code>のみ残る場合、別ブラウジングコンテキストを経由した可能性。実装は<code>localStorage</code>でも復元できる作りにしておくと安全。</li>
       </ul>
-      <p>※ ②は「ログイン画面」は出ません（リダイレクタが即戻すだけ）。<b>往復がアプリ内で成立するか</b>の技術判定用です。画面体験（旬報店デザイン）の確認は①、本番確認は③で旬報店の実URLを指定してください。</p>
+      <p>※ ①は同一オリジン、②は<b>別オリジン</b>の旬報店モック（どちらもログイン画面あり）。iOSで問題になりやすいのは<b>②の別オリジン往復</b>です。②が成立すれば本番（旬報店の実画面）も同様に成立する見込み。本番確認は③で旬報店の実URLを指定してください。</p>
       <p>※ 本ページは検証用モックです。トークン交換はサーバー間（BFF）で行う想定のため、ここでは擬似コードの受領までを確認します。</p>
     </div>
   </details>
@@ -151,29 +151,21 @@
     ].join("");
   }
 
-  function startFlow(mode, idpBase){
+  var _verifier="";
+  function startFlow(label, idpBase){
     sha256(_verifier=rand(64)).then(function(h){
       var challenge=b64url(h), state=rand(24);
-      var saved={ state:state, verifier:_verifier, mode:mode, startedAt:Date.now(), startDM:displayMode(), startOnline:navigator.onLine };
+      var saved={ state:state, verifier:_verifier, mode:label, startedAt:Date.now(), startDM:displayMode(), startOnline:navigator.onLine };
       try{ sessionStorage.setItem(KEY, JSON.stringify(saved)); }catch(e){}
       try{ localStorage.setItem(KEY, JSON.stringify(saved)); }catch(e){}
       var ret=selfUrl();
-      var url;
-      if(mode==="same"){
-        url="./idp-mock.html?response_type=code&client_id=cs-pwa&code_challenge_method=S256&prompt=login"
-          +"&redirect_uri="+encodeURIComponent(ret)+"&state="+encodeURIComponent(state)+"&code_challenge="+encodeURIComponent(challenge);
-      } else if(mode==="cross"){
-        var back=ret+"?code="+encodeURIComponent("xo-"+rand(10))+"&state="+encodeURIComponent(state);
-        url=idpBase+(idpBase.indexOf("?")>=0?"&":"?")+"status_code=302&url="+encodeURIComponent(back);
-      } else { // custom（旬報店 authorize想定）
-        url=idpBase+(idpBase.indexOf("?")>=0?"&":"?")+"response_type=code&client_id=cs-pwa&code_challenge_method=S256&prompt=login"
-          +"&redirect_uri="+encodeURIComponent(ret)+"&state="+encodeURIComponent(state)+"&code_challenge="+encodeURIComponent(challenge);
-      }
-      pushLog("▶ 開始 ["+mode+"] 表示="+saved.startDM+" → "+url.slice(0,90));
+      var qp="response_type=code&client_id=cs-pwa&code_challenge_method=S256&prompt=login"
+        +"&redirect_uri="+encodeURIComponent(ret)+"&state="+encodeURIComponent(state)+"&code_challenge="+encodeURIComponent(challenge);
+      var url=idpBase+(idpBase.indexOf("?")>=0?"&":"?")+qp;
+      pushLog("▶ 開始 ["+label+"] 表示="+saved.startDM+" → "+url.slice(0,90));
       location.href=url;
     });
   }
-  var _verifier="";
 
   function check(ok, label, detail){
     var mark = ok===true?"✅":ok===false?"❌":"⚠";
@@ -228,8 +220,8 @@
     try{ history.replaceState({}, "", selfUrl()); }catch(e){}
   }
 
-  document.getElementById("btnSame").onclick=function(){ startFlow("same"); };
-  document.getElementById("btnCross").onclick=function(){ startFlow("cross", (document.getElementById("redir").value||"https://httpbingo.org/redirect-to").trim()); };
+  document.getElementById("btnSame").onclick=function(){ startFlow("same","./idp-mock.html"); };
+  document.getElementById("btnCross").onclick=function(){ var u=(document.getElementById("cross").value||"").trim(); if(!u){ alert("② 別オリジンの旬報店モックURLを入力してください。"); return; } startFlow("cross", u); };
   document.getElementById("btnCustom").onclick=function(){ var u=(document.getElementById("custom").value||"").trim(); if(!u){ alert("③ 旬報店 authorize の URL を入力してください。"); return; } startFlow("custom", u); };
   document.getElementById("btnClear").onclick=function(){ try{ localStorage.removeItem(LOG); }catch(e){} renderLog(); };
 
