@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>OAuthリダイレクト検証（PWA）</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="CS検証">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1F4E78">
+<link rel="manifest" href="./manifest.webmanifest">
+<style>
+  :root{ --navy:#1F4E78; --green:#2E7D32; --amber:#B06E00; --red:#B00020; --line:#d8dee8; }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ margin:0; height:100%; }
+  body{ font-family:system-ui,-apple-system,"Segoe UI","Hiragino Sans","Noto Sans JP",sans-serif;
+    color:#20242c; background:#eef2f7; line-height:1.6;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  header{ background:var(--navy); color:#fff; padding:14px 18px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  header h1{ font-size:16px; margin:0; font-weight:700; }
+  .mode-badge{ margin-left:auto; background:#fff; color:var(--navy); font-weight:700; border-radius:999px; padding:4px 12px; font-size:13px; }
+  main{ max-width:880px; margin:0 auto; padding:16px; }
+  .lead{ color:#4a5568; font-size:13px; margin:4px 0 14px; }
+  .grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px; }
+  .card{ background:#fff; border:1px solid var(--line); border-radius:12px; padding:12px 14px; }
+  .card .k{ font-size:12px; color:#6b7280; margin:0 0 3px; }
+  .card .v{ font-size:15px; font-weight:700; margin:0; word-break:break-word; }
+  .ok{ color:var(--green); } .warn{ color:var(--amber); } .ng{ color:var(--red); }
+  .dot::before{ content:"●"; margin-right:6px; }
+  h2{ font-size:14px; color:var(--navy); margin:22px 0 8px; border-left:4px solid var(--navy); padding-left:8px; }
+  .actions{ display:flex; gap:10px; flex-wrap:wrap; margin:10px 0; }
+  button{ font:inherit; font-weight:700; border:0; border-radius:10px; padding:12px 16px; color:#fff; background:var(--navy); cursor:pointer; }
+  button.alt{ background:#2f6fed; } button.ghost{ background:#fff; color:var(--navy); border:1.5px solid var(--navy); }
+  input[type=text]{ font:inherit; width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:10px; }
+  .result{ border-radius:12px; padding:14px 16px; margin:8px 0; border:1px solid var(--line); background:#fff; }
+  .result h3{ margin:0 0 8px; font-size:16px; }
+  .check{ display:flex; align-items:flex-start; gap:8px; margin:5px 0; font-size:14px; }
+  .check b{ min-width:1.4em; }
+  .verdict{ border-radius:10px; padding:12px 14px; font-weight:700; font-size:14px; margin-top:10px; }
+  .v-ok{ background:#E9F7EC; color:#1b5e20; border:1px solid #9ad3a3; }
+  .v-ng{ background:#FDECEC; color:#8a1020; border:1px solid #e3a3ab; }
+  .v-na{ background:#FFF8E1; color:#6b5900; border:1px solid #F3D27A; }
+  pre.log{ background:#0f1b2b; color:#cfe3ff; font-size:12px; border-radius:10px; padding:12px; overflow:auto; max-height:230px; white-space:pre-wrap; word-break:break-all; }
+  details{ background:#fff; border:1px solid var(--line); border-radius:12px; margin:10px 0; }
+  summary{ padding:13px 16px; font-weight:700; cursor:pointer; color:var(--navy); }
+  details .body{ padding:0 16px 14px; font-size:13.5px; color:#374151; }
+  code{ background:#eef2f7; padding:1px 5px; border-radius:4px; font-size:12px; }
+  .note{ background:#FFF8E1; border:1px solid #F3D27A; border-radius:12px; padding:12px 14px; font-size:13px; color:#6b5900; margin-top:12px; }
+  a.back{ color:#fff; text-decoration:none; font-weight:700; font-size:13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>OAuthリダイレクト検証（PWA）</h1>
+  <a class="back" href="./index.html">↩ 検証トップ</a>
+  <span class="mode-badge" id="badge">判定中…</span>
+</header>
+
+<main>
+  <p class="lead">
+    代替案（<b>認可コード＋PKCE／ログインは旬報店の画面</b>）を想定し、<b>インストール済みPWA（スタンドアロン）で外部IdPへリダイレクト→戻ってこられるか</b>を実機で確認します。
+    まず<b>①ホーム画面に追加→アイコン起動（スタンドアロン）</b>にしてから、下のボタンで検証してください（ブラウザ表示のままでも参考値は取れます）。
+  </p>
+
+  <h2>いまの端末</h2>
+  <div class="grid" id="env"></div>
+
+  <h2>検証を開始</h2>
+  <div class="actions">
+    <button id="btnSame" class="alt">① 同一オリジンの旬報店モックでログイン</button>
+    <button id="btnCross">② クロスオリジン往復（本命・iOSの要確認点）</button>
+  </div>
+  <div style="margin:8px 0">
+    <div class="card">
+      <p class="k">クロスオリジン用リダイレクタ（②で使用・変更可）</p>
+      <input type="text" id="redir" value="https://httpbingo.org/redirect-to">
+      <p class="k" style="margin-top:6px">③ 将来の旬報店 authorize URL を直接試す（任意）</p>
+      <input type="text" id="custom" placeholder="例）https://idp.junpoten.example/authorize">
+      <div class="actions"><button id="btnCustom" class="ghost">③ このURLでログイン開始</button></div>
+    </div>
+  </div>
+
+  <h2>結果</h2>
+  <div id="result"></div>
+
+  <h2>経過ログ（リダイレクトをまたいで保持）</h2>
+  <pre class="log" id="log">（まだありません）</pre>
+  <div class="actions"><button id="btnClear" class="ghost">ログを消去</button></div>
+
+  <details>
+    <summary>判定の見方 / この検証でわかること</summary>
+    <div class="body">
+      <ul>
+        <li><b>戻り先がスタンドアロンのまま＝◎</b>：インストール済みアプリ内でOAuthの往復が完結＝代替案がPWAで成立。</li>
+        <li><b>戻り先がブラウザ（Safari）になった＝要対策</b>：ログインは出来てもアプリの外（Safari）に出てしまう。iOSのスタンドアロンPWAで起きやすい挙動。対策候補＝<code>window.open</code>別方式／カスタムURIスキーム／ユニバーサルリンクでアプリに戻す等。</li>
+        <li><b>state / PKCE(verifier) の保持</b>：<code>sessionStorage</code>が失われ<code>localStorage</code>のみ残る場合、別ブラウジングコンテキストを経由した可能性。実装は<code>localStorage</code>でも復元できる作りにしておくと安全。</li>
+      </ul>
+      <p>※ ②は「ログイン画面」は出ません（リダイレクタが即戻すだけ）。<b>往復がアプリ内で成立するか</b>の技術判定用です。画面体験（旬報店デザイン）の確認は①、本番確認は③で旬報店の実URLを指定してください。</p>
+      <p>※ 本ページは検証用モックです。トークン交換はサーバー間（BFF）で行う想定のため、ここでは擬似コードの受領までを確認します。</p>
+    </div>
+  </details>
+
+  <div class="note">
+    推奨手順：<b>（A）ブラウザで一度実行</b>→<b>（B）ホーム画面に追加してスタンドアロンで同じ②を実行</b>し、<b>戻り時の表示モード</b>が変わらないか比較してください。iPad/iOSのバージョンごとに挙動が変わるため、<b>実際に使う端末</b>で確認するのが目的です。
+  </div>
+</main>
+
+<script>
+(function(){
+  "use strict";
+  var KEY = "authtest_state";
+  var LOG = "authtest_log";
+  var ua = navigator.userAgent;
+  var isIOS = /iphone|ipad|ipod/i.test(ua) || (navigator.platform==="MacIntel" && navigator.maxTouchPoints>1);
+  var isAndroid = /android/i.test(ua);
+  var platform = isIOS ? "iOS (iPhone/iPad)" : isAndroid ? "Android" : "PC / その他";
+
+  function displayMode(){
+    if (navigator.standalone === true) return "standalone";
+    var ms = ["fullscreen","standalone","minimal-ui"];
+    for (var i=0;i<ms.length;i++){ try{ if(matchMedia("(display-mode: "+ms[i]+")").matches) return ms[i]; }catch(e){} }
+    return "browser";
+  }
+  function selfUrl(){ return location.origin + location.pathname; }
+  function rand(n){ var s="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"; var a=new Uint8Array(n); crypto.getRandomValues(a); var o=""; for(var i=0;i<n;i++) o+=s[a[i]%s.length]; return o; }
+  function b64url(buf){ var b=btoa(String.fromCharCode.apply(null,new Uint8Array(buf))); return b.replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,""); }
+  function sha256(str){ return crypto.subtle.digest("SHA-256", new TextEncoder().encode(str)); }
+
+  function now(){ try{ return new Date().toLocaleTimeString("ja-JP"); }catch(e){ return ""+Date.now(); } }
+  function pushLog(msg){
+    var arr = []; try{ arr = JSON.parse(localStorage.getItem(LOG)||"[]"); }catch(e){}
+    arr.push(now()+"  "+msg); if(arr.length>80) arr=arr.slice(-80);
+    try{ localStorage.setItem(LOG, JSON.stringify(arr)); }catch(e){}
+    renderLog();
+  }
+  function renderLog(){
+    var arr=[]; try{ arr=JSON.parse(localStorage.getItem(LOG)||"[]"); }catch(e){}
+    document.getElementById("log").textContent = arr.length? arr.join("\n") : "（まだありません）";
+  }
+
+  function card(k,v,cls){ return '<div class="card"><p class="k">'+k+'</p><p class="v '+(cls||"")+'">'+v+'</p></div>'; }
+  function renderEnv(){
+    var dm=displayMode(); document.getElementById("badge").textContent="表示:"+dm;
+    document.getElementById("env").innerHTML = [
+      card("表示モード", dm, dm==="browser"?"warn dot":"ok dot"),
+      card("プラットフォーム", platform, "dot"),
+      card("インストール状態", dm!=="browser"?"インストール済み（アプリ表示）":"ブラウザ表示中", dm!=="browser"?"ok dot":"warn dot"),
+      card("オンライン", navigator.onLine?"オンライン":"オフライン", navigator.onLine?"ok dot":"ng dot")
+    ].join("");
+  }
+
+  function startFlow(mode, idpBase){
+    sha256(_verifier=rand(64)).then(function(h){
+      var challenge=b64url(h), state=rand(24);
+      var saved={ state:state, verifier:_verifier, mode:mode, startedAt:Date.now(), startDM:displayMode(), startOnline:navigator.onLine };
+      try{ sessionStorage.setItem(KEY, JSON.stringify(saved)); }catch(e){}
+      try{ localStorage.setItem(KEY, JSON.stringify(saved)); }catch(e){}
+      var ret=selfUrl();
+      var url;
+      if(mode==="same"){
+        url="./idp-mock.html?response_type=code&client_id=cs-pwa&code_challenge_method=S256&prompt=login"
+          +"&redirect_uri="+encodeURIComponent(ret)+"&state="+encodeURIComponent(state)+"&code_challenge="+encodeURIComponent(challenge);
+      } else if(mode==="cross"){
+        var back=ret+"?code="+encodeURIComponent("xo-"+rand(10))+"&state="+encodeURIComponent(state);
+        url=idpBase+(idpBase.indexOf("?")>=0?"&":"?")+"status_code=302&url="+encodeURIComponent(back);
+      } else { // custom（旬報店 authorize想定）
+        url=idpBase+(idpBase.indexOf("?")>=0?"&":"?")+"response_type=code&client_id=cs-pwa&code_challenge_method=S256&prompt=login"
+          +"&redirect_uri="+encodeURIComponent(ret)+"&state="+encodeURIComponent(state)+"&code_challenge="+encodeURIComponent(challenge);
+      }
+      pushLog("▶ 開始 ["+mode+"] 表示="+saved.startDM+" → "+url.slice(0,90));
+      location.href=url;
+    });
+  }
+  var _verifier="";
+
+  function check(ok, label, detail){
+    var mark = ok===true?"✅":ok===false?"❌":"⚠";
+    var cls = ok===true?"ok":ok===false?"ng":"warn";
+    return '<div class="check"><b class="'+cls+'">'+mark+'</b><div>'+label+(detail?' <span style="color:#6b7280">— '+detail+'</span>':'')+'</div></div>';
+  }
+  function handleReturn(){
+    var p=new URLSearchParams(location.search);
+    if(!(p.has("code")||p.has("error"))) {
+      document.getElementById("result").innerHTML='<div class="result"><h3>未実行</h3><div style="font-size:14px;color:#4a5568">上の①〜③のいずれかで開始してください。戻ってくるとここに判定が出ます。</div></div>';
+      return;
+    }
+    var ss=sessionStorage.getItem(KEY), ls=localStorage.getItem(KEY);
+    var saved=null; try{ saved=JSON.parse(ss||ls||"null"); }catch(e){}
+    var dmNow=displayMode();
+    var startDM = saved?saved.startDM:"(不明)";
+    var sessionSurvived = !!ss, localSurvived=!!ls;
+    var stateMatch = saved && p.get("state")===saved.state;
+    var elapsed = saved? Math.round((Date.now()-saved.startedAt)/100)/10 : null;
+    var err = p.get("error");
+    var startedStandalone = !!(saved && saved.startDM && saved.startDM!=="browser");
+    var returnedStandalone = dmNow!=="browser";
+    pushLog("◀ 戻り 表示="+dmNow+"（開始時="+startDM+"） ss="+sessionSurvived+" ls="+localSurvived+" state一致="+!!stateMatch+(err?(" error="+err):""));
+
+    var html='<div class="result"><h3>'+(err?"⚠ ログインがキャンセル/エラー":"戻ってきました")+'</h3>';
+    html+=check(!err, err?("IdPから error="+err):"認可コードを受領", err?"":("code="+(p.get("code")||"").slice(0,16)+"…"));
+    if(startedStandalone){
+      html+=check(returnedStandalone, "戻り先がスタンドアロン（アプリ内）を維持", "開始="+startDM+" → 戻り="+dmNow);
+    } else {
+      html+=check(null, "開始時はブラウザ表示", "スタンドアロン維持の判定はホーム画面追加後に実施してください（現在ブラウザ）");
+    }
+    html+=check(sessionSurvived, "sessionStorage が保持された（state/PKCE）", sessionSurvived?"":"失われた→localStorageで復元可か確認");
+    html+=check(localSurvived? true : false, "localStorage が保持された", "");
+    html+=check(!!stateMatch, "state 一致（CSRF対策）", stateMatch?"":"不一致/復元不可");
+    html+=check(!!(saved&&saved.verifier), "PKCE code_verifier を復元できた", "");
+    if(elapsed!=null) html+='<div class="check"><b>⏱</b><div>所要 '+elapsed+' 秒</div></div>';
+
+    // verdict
+    var vcls, vtxt;
+    if(err){ vcls="v-na"; vtxt="ログインがキャンセル/エラーでした。再度お試しください。"; }
+    else if(!saved){ vcls="v-na"; vtxt="保存情報が見つかりません。この画面の①〜③から開始して戻ってきた場合のみ判定できます（URLを直接開いた等）。"; }
+    else if(!startedStandalone){ vcls="v-na"; vtxt="参考値です。判定は『ホーム画面に追加→アイコン起動（スタンドアロン）』で②を実行して確認してください。"; }
+    else if(returnedStandalone && stateMatch){ vcls="v-ok"; vtxt="◎ この端末では、インストール済みPWA内でOAuthの往復が成立しました（スタンドアロン維持・state/PKCE保持）。代替案はこの端末で実装可能です。"; }
+    else if(!returnedStandalone){ vcls="v-ng"; vtxt="❌ 戻り先がブラウザになりました＝アプリの外（Safari等）に出ています。このままでは代替案のログインがインストール済みアプリ内で完結しません。要対策（別方式／カスタムURIスキーム等）。"; }
+    else { vcls="v-ng"; vtxt="❌ state/PKCEの保持に失敗しました。ストレージがリダイレクトをまたいで保持されていません。実装でlocalStorage併用等の対策が必要です。"; }
+    html+='<div class="verdict '+vcls+'">'+vtxt+'</div>';
+    html+='</div>';
+    document.getElementById("result").innerHTML=html;
+
+    // 後片付け（1回限り）
+    try{ sessionStorage.removeItem(KEY); localStorage.removeItem(KEY); }catch(e){}
+    try{ history.replaceState({}, "", selfUrl()); }catch(e){}
+  }
+
+  document.getElementById("btnSame").onclick=function(){ startFlow("same"); };
+  document.getElementById("btnCross").onclick=function(){ startFlow("cross", (document.getElementById("redir").value||"https://httpbingo.org/redirect-to").trim()); };
+  document.getElementById("btnCustom").onclick=function(){ var u=(document.getElementById("custom").value||"").trim(); if(!u){ alert("③ 旬報店 authorize の URL を入力してください。"); return; } startFlow("custom", u); };
+  document.getElementById("btnClear").onclick=function(){ try{ localStorage.removeItem(LOG); }catch(e){} renderLog(); };
+
+  ["resize","orientationchange","visibilitychange","online","offline"].forEach(function(ev){ window.addEventListener(ev, renderEnv); });
+  if("serviceWorker" in navigator){ navigator.serviceWorker.register("./sw.js").catch(function(){}); }
+  renderEnv(); renderLog(); handleReturn();
+})();
+</script>
+</body>
+</html>
